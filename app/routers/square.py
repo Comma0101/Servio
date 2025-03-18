@@ -55,3 +55,9 @@ async def process_payment(request: Request, data: Dict[str, Any] = Body(...)):
         print("[POST:/process-payment]", error)
         traceback.print_exc()
         return JSONResponse({"error": "Internal Error"}, status_code=500)
+
+
+#add get test endpoint
+@router.get("/test", response_class=JSONResponse)
+async def test(request: Request):
+    return JSONResponse({"message": "Square API test endpoint"})

@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 from app.utils.twilio import gather_voice_message
 from app.constants import CONSTANTS
 from app.middleware.session import get_session, set_session
+from app.utils.redis_store import store_chat_history, get_chat_history
 
 router = APIRouter()
 
@@ -19,6 +20,7 @@ async def post_chat(
     From: str = Form(None),
     client_id: Optional[str] = None,
     timeSent: Optional[str] = Cookie(None),
+    CallSid: str = Form(None),  # Add CallSid parameter to capture Twilio call ID
 ):
     try:
         print("[POST:/calls/chat/] ")
@@ -26,6 +28,7 @@ async def post_chat(
 
         phone_number = From
         print("[POST:/calls/chat/] phone_number: ", phone_number)
+        print("[POST:/calls/chat/] CallSid: ", CallSid)
 
         if client_id is None:
             return PlainTextResponse(
@@ -74,7 +77,12 @@ async def post_chat(
         elapsed_time = (end_time - start_time).total_seconds()
         print(f"[POST:/calls/chat/] execution time: {elapsed_time} seconds")
 
-        # Store chat history in session
+        # Store chat history in both Redis and session
+        if CallSid:
+            store_chat_history(CallSid, chat_history)
+            print(f"[POST:/calls/chat/] Stored initial chat history in Redis for call {CallSid}")
+            
+        # Also store in session as fallback
         session = get_session(request)
         session["chat_history"] = chat_history
         set_session(request, "chat_history", chat_history)

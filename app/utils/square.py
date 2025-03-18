@@ -4,7 +4,7 @@ import asyncio
 from typing import List, Dict, Any, Optional
 from app.models.schemas import OrderItem  # if you have such imports
 
-ACCESS_TOKEN = "EAAAlxqe8a_RXLtv0DOqN9ANgLPVMG9oO_bfzgUG35xrNVl9aw6FXJ6b7i-lp9n0"
+ACCESS_TOKEN = "EAAAl9eu_8NtFKUH0Tx1jzwCJ8nMHydO1KnW0S6caBXjJv7nqcpVM22ye_vTwObB"
 
 # Headers for Square API requests
 headers = {
@@ -61,7 +61,7 @@ async def retrieve_square_order(order_id):
 
 async def test_payment_processing(order_id, amount, payment_method_id):
     # URL for the /process-payment route of your FastAPI app
-    url = "http://127.0.0.1:8000/api/v1/process-payment"
+    url = "http://127.0.0.1:5050/api/v1/process-payment"
 
     # Payload structure as expected by your /process-payment route
     payload = {
@@ -84,6 +84,7 @@ async def test_payment_processing(order_id, amount, payment_method_id):
 
 
 async def test_create_order_endpoint(order_data):
+    print(f"DEBUG: test_create_order_endpoint called with order_data: {order_data}")
     items = []
     for item in order_data:
         item_name = item["name"]
@@ -101,7 +102,7 @@ async def test_create_order_endpoint(order_data):
     if not items:
         return {"error": "No valid items or quantities found"}
 
-    url = "http://127.0.0.1:8000/api/v1/create-order"
+    url = "http://127.0.0.1:5050/api/v1/create-order"
     data = {"items": items}
 
     response = await asyncio.to_thread(requests.post, url, json=data)

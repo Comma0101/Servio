@@ -2,10 +2,11 @@ from fastapi import Request, Response
 import json
 from typing import Dict, Any
 import base64
+from starlette.middleware.base import BaseHTTPMiddleware
 
 
-class SessionMiddleware:
-    async def __call__(self, request: Request, call_next):
+class SessionMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
         # Get session from cookie
         session_cookie = request.cookies.get("session")
         session_data = {}
@@ -19,15 +20,13 @@ class SessionMiddleware:
 
         # Add session to request state
         request.state.session = session_data
+        request.state.session_modified = False
 
         # Process request
         response = await call_next(request)
 
         # Update session cookie if needed
-        if (
-            hasattr(request.state, "session_modified")
-            and request.state.session_modified
-        ):
+        if hasattr(request.state, "session_modified") and request.state.session_modified:
             encoded = base64.b64encode(
                 json.dumps(request.state.session).encode()
             ).decode()

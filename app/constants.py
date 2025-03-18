@@ -5,7 +5,7 @@ import requests
 # Define headers for Square API requests
 headers = {
     "Square-Version": "2022-04-20",
-    "Authorization": "Bearer EAAAlxqe8a_RXLtv0DOqN9ANgLPVMG9oO_bfzgUG35xrNVl9aw6FXJ6b7i-lp9n0",
+    "Authorization": "Bearer EAAAl9eu_8NtFKUH0Tx1jzwCJ8nMHydO1KnW0S6caBXjJv7nqcpVM22ye_vTwObB",
     "Content-Type": "application/json",
 }
 
@@ -39,7 +39,7 @@ CONSTANTS = {
         ),
         "INITIAL_ASSISTANT_MESSAGE": "Welcome to KK restaurant, what would you like to order today?",
         # "Welcome to Love Is My Form restaurant. Would you like to place an order for pickup?",
-        "INITIAL_USER_MESSAGE": "Hello, If I am ordering, you should tell me if I order something that is not in the menu. after summarize the order",
+        "INITIAL_USER_MESSAGE": "Hello, If I am ordering, you should tell me if I order something that is not in the menu.  summarize the order",
         # "If I order something not in the menu, let me know and give me an alternative and when I am done, summarize the dishes list and let me know the total amount due in Rupees and say 'plus taxes'. Then ask me my name and if I want to pick up the order now or later. If later, ask me the date and time. If you feel the phone call is over, say 'DONE' only",
         "ASSISTANT_ID": "asst_OSWVXg4hN8GozhcKNLjZVxGk",
         "TWILIO_LANGUAGE": "en-US",
@@ -51,7 +51,7 @@ CONSTANTS = {
         # "TWILIO_CONFIDENCE_THRESHOLD": 0.4,
         "TWILIO_VOICE": "Polly.Joanna-Neural",
         "OPENAI_CHAT_MODEL": "gpt-4o-mini",
-        "OPENAI_CHAT_MAX_TOKENS": 150,
+        "OPENAI_CHAT_MAX_TOKENS": 500,
         "OPENAI_CHAT_TEMPERATURE": 0.5,
         "OPENAI_CHAT_TOP_P": 1,
         "OPENAI_CHAT_SEED": 1,
