@@ -1,0 +1,73 @@
+version: 1
+disable_existing_loggers: False
+
+formatters:
+  default:
+    (): "uvicorn.logging.DefaultFormatter"
+    fmt: "%(levelprefix)s %(message)s"
+    use_colors: null # Let uvicorn decide based on TTY
+  access:
+    (): "uvicorn.logging.AccessFormatter"
+    fmt: '%(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s'
+    use_colors: null # Let uvicorn decide based on TTY
+  detailed: # Formatter for your application logs
+    format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    datefmt: '%Y-%m-%d %H:%M:%S'
+
+filters:
+  cancelled_filter:
+    # This points to the filter class we will define in log_filters.py
+    (): app.log_filters.CancelledErrorFilter
+
+handlers:
+  # Handler for default uvicorn messages (like startup/shutdown)
+  default:
+    formatter: default
+    class: logging.StreamHandler
+    stream: ext://sys.stderr
+    filters: [cancelled_filter]  # Apply filter to the default handler
+  # Handler for access logs (requests)
+  access:
+    formatter: access
+    class: logging.StreamHandler
+    stream: ext://sys.stdout
+  # Handler for your application's specific logs
+  app_handler:
+    formatter: detailed
+    class: logging.StreamHandler
+    stream: ext://sys.stdout # Or stderr if you prefer
+    filters: [cancelled_filter]  # Apply filter to the app handler
+
+loggers:
+  # Configures the root uvicorn logger
+  uvicorn:
+    handlers: [default]
+    level: INFO
+    propagate: False
+    filters: [cancelled_filter]  # Apply filter to uvicorn logger
+  # Configures the logger specifically for Uvicorn errors
+  uvicorn.error:
+    handlers: [default] # Use the same handler as general uvicorn messages
+    level: INFO # Log INFO level and above for errors
+    propagate: False
+    filters: [cancelled_filter] # Apply our custom filter here!
+  # Configures the logger for Uvicorn access messages
+  uvicorn.access:
+    handlers: [access]
+    level: WARNING # Reduce noise by only showing WARNING and above for access
+    propagate: False
+  # Configure your application's logger (adjust name if needed)
+  # If you use logger = logging.getLogger("my_app") in Python, use "my_app" here.
+  # Using "__main__" might work if logger = logging.getLogger(__name__) in main.py
+  # Or use a specific name like "servio_app"
+  __main__: # Catches logger = logging.getLogger(__name__) from main.py
+    handlers: [app_handler]
+    level: INFO
+    propagate: False
+    filters: [cancelled_filter]  # Apply filter to your main app logger
+
+# Configure the root logger as a catch-all
+root:
+  level: INFO
+  handlers: [default]
+  filters: [cancelled_filter]  # Apply filter to root logger
