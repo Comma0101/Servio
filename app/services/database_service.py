@@ -7,6 +7,7 @@ import os
 import datetime
 from dotenv import load_dotenv
 from typing import List, Dict, Any, Optional
+import time
 
 # Load environment variables
 load_dotenv()
@@ -196,8 +197,32 @@ async def save_utterance(call_sid: str, speaker: str, text: str, confidence: flo
                 logger.info(f"Saved utterance: [{speaker}] {text[:30]}{'...' if len(text) > 30 else ''}")
         return True
     except Exception as e:
-        logger.error(f"Error saving utterance: {e}")
+        logger.error(f"Error saving utterance for call {call_sid}: {e}")
         return False
+
+async def save_order_details(call_sid: str, items: List[Dict[str, Any]], total_price: float, is_complete: bool):
+    """Save order details associated with a call."""
+    try:
+        logger.info(f"Saving order details for call {call_sid}: {items}, Total: {total_price}, Complete: {is_complete}")
+        # TODO: Implement database logic to save order details
+        # Example: Connect to DB, INSERT into orders table (call_sid, item_name, quantity, variation, total_price, is_complete)
+        # For now, just log the details.
+        order_id = f"order_{call_sid[:8]}_{int(time.time())}" # Placeholder order ID
+        logger.info(f"Placeholder order ID generated: {order_id}")
+        return order_id
+    except Exception as e:
+        logger.error(f"Error saving order details for call {call_sid}: {e}")
+        return None
+
+async def update_order_payment_status(order_id: str, status: str, square_order_id: Optional[str], square_payment_id: Optional[str]):
+    """Update the payment status and Square IDs for an order."""
+    try:
+        logger.info(f"Updating payment status for order {order_id}: Status={status}, SquareOrderID={square_order_id}, SquarePaymentID={square_payment_id}")
+        # TODO: Implement database logic to update the order record.
+        # Example: Connect to DB, UPDATE orders table SET status=?, square_order_id=?, square_payment_id=? WHERE order_id=?
+        pass # Placeholder - just log for now
+    except Exception as e:
+        logger.error(f"Error updating payment status for order {order_id}: {e}")
 
 async def get_recent_utterances(limit: int = 20) -> List[Dict[str, Any]]:
     """Get the most recent utterances from all calls"""
@@ -306,3 +331,10 @@ async def get_call_details(call_sid: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Error fetching call details: {e}")
         return None
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

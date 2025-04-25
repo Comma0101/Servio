@@ -45,6 +45,7 @@ class AudioHandler:
         # Order processing flags
         self.order_processed = False
         self.order_confirmation_sent = False
+        self.is_final_confirmation = False
         
         # S3 upload tracking
         self.stop_event_handled = False
@@ -70,15 +71,32 @@ class AudioHandler:
                     data = json.loads(message)
                     event_type = data.get("event")
                     
+                    # logger.info(f"Received event: {event_type}") # Comment out this general log too
                     if event_type == "start":
                         await self._handle_start_event(data)
-                    elif event_type == "media" and data.get("media", {}).get("track") == "inbound":
+                    elif event_type == "media":
+                        # logger.info("Received event: media") # Commented out verbose log
                         await self._handle_media_event(data)
                     elif event_type == "stop":
                         await self._handle_stop_event(data)
+                        break # Exit loop after stop event
+                    elif event_type == "mark":
+                        await self._handle_mark_event(data)
+                        # Check if this is the specific mark indicating final audio played
+                        mark_name = data.get("mark", {}).get("name")
+                        if mark_name == FINAL_AUDIO_MARK_NAME:
+                            logger.info(f"Received final message mark '{mark_name}'. Initiating immediate hangup.")
+                            if self.call_sid:
+                                # Use the REST API to hang up immediately
+                                result = end_call(self.call_sid) 
+                                logger.info(f"Hangup initiated via REST API due to mark event. Result: {result}")
+                                # Optionally, you might want to ensure S3 upload happens if not already triggered by stop
+                                # await self._ensure_s3_upload()
+                                break # Exit loop after final mark processing and hangup
+                            else:
+                                logger.error("Cannot hang up after mark event: call_sid is missing.")
                     else:
                         logger.info(f"Received unhandled Twilio event type: {event_type}")
-                        
                 except json.JSONDecodeError:
                     logger.error(f"Failed to parse Twilio message: {message}")
                 except Exception as e:
@@ -96,119 +114,147 @@ class AudioHandler:
             await self._handle_stop_event({"event": "stop"})
         finally:
             # Make absolutely sure we handle the stop event to upload audio when the function completes
-            # This handles cases where the WebSocket closes without an error
-            logger.info("Twilio message processing complete, ensuring stop event is handled")
-            await self._handle_stop_event({"event": "stop"})
+            # This handles cases where the WebSocket closes without an error, 
+            # but avoid double-upload if already handled by mark/stop break
+            if not self.stop_event_handled:
+                logger.info("Twilio message processing loop ended, ensuring stop event is handled for S3 upload.")
+                await self._handle_stop_event({"event": "stop"}) # Synthesize stop if needed
+                
+            # Cleanup call state
+            if self.call_sid:
+                logger.info(f"Removing call state for {self.call_sid} at end of processing loop.")
+                await remove_call_state(self.call_sid) 
+                logger.info(f"Removed call state for {self.call_sid}")
+                
+            logger.info("WebSocket session ended")
     
     async def _handle_start_event(self, data: Dict[str, Any]):
         """Handle Twilio start event"""
-        logger.info("Received 'start' event from Twilio")
-        start_data = data.get("start", {})
-        
-        # Extract Stream SID
-        self.stream_sid = start_data.get("streamSid")
-        logger.info(f"Stream SID: {self.stream_sid}")
-        
-        # Extract Call SID
-        self.call_sid = start_data.get("callSid")
-        logger.info(f"Call SID: {self.call_sid}")
-        
-        # Get caller phone from websocket module's stored information
-        from app.api.websocket import get_caller_phone
-        if self.call_sid:
+        # Log the raw start event data for debugging
+        logger.info(f"Received start event data: {json.dumps(data)}") 
+        try:
+            # Extract stream SID and call metadata
+            self.stream_sid = data.get("streamSid")
+            # Correctly extract nested callSid
+            self.call_sid = data.get("start", {}).get("callSid") 
+            
+            # CRITICAL: Check if call_sid is None or empty after extraction
+            if self.call_sid is None or self.call_sid == "":
+                logger.critical(f"CRITICAL ERROR: callSid is missing, None, or empty in start event data for stream {self.stream_sid}. Raw data: {json.dumps(data)}. Cannot proceed.")
+                # Optionally, close the connection or raise an error if this is unrecoverable
+                # await self.websocket.close(code=1011, reason="Missing or invalid callSid") 
+                return # Stop processing this event
+            
+            # Log call_sid immediately after assignment and validation
+            logger.info(f"Call started: {self.call_sid}, Stream: {self.stream_sid}")
+            
+            # Parse caller phone from start event
+            from app.api.websocket import get_caller_phone
             self.caller_phone = get_caller_phone(self.call_sid)
             
-        # If we still don't have a caller phone, try to extract it from the data
-        if not self.caller_phone:
-            self._extract_caller_phone(start_data, data)
-        
-        # If extraction failed, use fallback number
-        if not self.caller_phone:
-            logger.warning("Could not extract caller phone number from Twilio data")
-            self.caller_phone = "+18005551234"  # Fallback number
-            logger.info(f"Using fallback caller ID: {self.caller_phone}")
-        else:
-            logger.info(f"Using caller phone: {self.caller_phone}")
-        
-        # Save call start information to the database
-        try:
-            from app.services.database_service import save_call_start
-            await save_call_start(self.call_sid, self.caller_phone)
-            logger.info(f"Saved call start: {self.call_sid}")
-        except Exception as e:
-            logger.error(f"Error saving call start: {e}")
+            if not self.caller_phone:
+                if "customParameters" in data and "callerId" in data["customParameters"]:
+                    self.caller_phone = data["customParameters"]["callerId"]
+                    
+            logger.info(f"Call started: {self.call_sid}, Stream: {self.stream_sid}, Caller: {self.caller_phone}")
             
-        # Make the agent speak first with a greeting
-        try:
-            # Get restaurant name from config for personalized greeting
-            from app.utils.constants import get_restaurant_config
-            restaurant_config = get_restaurant_config(self.client_id)
-            restaurant_name = restaurant_config.get("RESTAURANT_NAME", "KK Restaurant")
-            
-            # Create greeting message
-            initial_greeting = {
-                "type": "InjectAgentMessage",
-                "message": f"Hello! Welcome to {restaurant_name}. I'm your AI voice assistant. How can I help you today?"
-            }
-            
-            # Send the greeting to Deepgram
-            await self.deepgram_service.send_json(initial_greeting)
-            logger.info("Sent initial greeting to make agent speak first")
-        except Exception as e:
-            logger.error(f"Error sending initial greeting: {e}")
-        
-        # If we have a restaurant ID, send the menu via SMS
-        if self.client_id and not self.menu_sms_sent:
+            # Register this call with call state service for TTS completion tracking
             try:
-                # Get restaurant menu
-                from app.utils.constants import get_restaurant_config, get_restaurant_menu
-                restaurant_config = get_restaurant_config(self.client_id)
-                menu_items = get_restaurant_menu(self.client_id)
-                logger.info(f"Formatting menu with {len(menu_items)} items for SMS")
-                
-                # Format the menu data for SMS
-                from app.utils.menu_formatter import format_menu_for_sms
-                menu_text = format_menu_for_sms(menu_items, self.client_id)
-                
-                # Send the SMS
-                from app.utils.twilio import send_sms
-                send_sms(self.caller_phone, menu_text, self.client_id)
-                
-                # Set flag to prevent sending duplicate SMS
-                self.menu_sms_sent = True
+                from app.services.call_state_service import register_call
+                await register_call(self.call_sid, self.stream_sid, self.caller_phone)
+                logger.info(f"Registered call {self.call_sid} with call state service")
             except Exception as e:
-                logger.error(f"Error sending menu via SMS: {e}")
+                logger.error(f"Error registering call with state service: {e}")
+            
+            # Save call start information to the database
+            try:
+                from app.services.database_service import save_call_start
+                await save_call_start(self.call_sid, self.caller_phone)
+                logger.info(f"Saved call start: {self.call_sid}")
+            except Exception as e:
+                logger.error(f"Error saving call start: {e}")
+            
+            # Make the agent speak first with a greeting
+            try:
+                # Get restaurant name from config for personalized greeting
+                from app.utils.constants import get_restaurant_config
+                restaurant_config = get_restaurant_config(self.client_id)
+                restaurant_name = restaurant_config.get("RESTAURANT_NAME", "KK Restaurant")
+                
+                # Create greeting message
+                initial_greeting = {
+                    "type": "InjectAgentMessage",
+                    "message": f"Hello! Welcome to {restaurant_name}. I'm your AI voice assistant. How can I help you today?"
+                }
+                
+                # Send the greeting to Deepgram
+                await self.deepgram_service.send_json(initial_greeting)
+                logger.info("Sent initial greeting to make agent speak first")
+            except Exception as e:
+                logger.error(f"Error sending initial greeting: {e}")
+            
+            # If we have a restaurant ID, send the menu via SMS
+            if self.client_id and not self.menu_sms_sent:
+                try:
+                    # Get restaurant menu
+                    from app.utils.constants import get_restaurant_config, get_restaurant_menu
+                    restaurant_config = get_restaurant_config(self.client_id)
+                    menu_items = get_restaurant_menu(self.client_id)
+                    logger.info(f"Formatting menu with {len(menu_items)} items for SMS")
+                    
+                    # Format the menu data for SMS
+                    from app.utils.menu_formatter import format_menu_for_sms
+                    menu_text = format_menu_for_sms(menu_items, self.client_id)
+                    
+                    # Send the SMS
+                    from app.utils.twilio import send_sms
+                    send_sms(self.caller_phone, menu_text, self.client_id)
+                    
+                    # Set flag to prevent sending duplicate SMS
+                    self.menu_sms_sent = True
+                except Exception as e:
+                    logger.error(f"Error sending menu via SMS: {e}")
+        except Exception as e:
+            logger.error(f"Error handling start event: {e}")
     
     async def _handle_media_event(self, data: Dict[str, Any]):
         """Handle Twilio media event"""
-        # Extract audio payload
-        payload = data.get("media", {}).get("payload")
-        if not payload:
-            logger.warning("Received media event without payload")
-            return
-        
-        # Decode base64 audio data
         try:
-            chunk = base64.b64decode(payload)
-            
-            # Add to internal buffer
-            self.inbuffer.extend(chunk)
-            
-            # Add to complete audio buffer for S3 upload
-            self.complete_audio_buffer.extend(chunk)
-            
-            # If buffer is full, send to Deepgram
-            if len(self.inbuffer) >= self.buffer_size_bytes:
-                # Copy the buffer contents up to the desired size
-                to_send = bytes(self.inbuffer[:self.buffer_size_bytes])
+            # Track media events for TTS completion detection
+            if "media" in data:
+                media_data = data.get("media", {})
+                track = media_data.get("track")
+                state = media_data.get("state")
                 
-                # Clear the sent data from the buffer
-                self.inbuffer = self.inbuffer[self.buffer_size_bytes:]
-                
-                # Send to Deepgram
-                await self.deepgram_service.send_audio(to_send)
+                # Check for track state changes (common in WebRTC for completion signals)
+                if state and state in ["ended", "completed"]:
+                    logger.info(f"Media track {track} state changed to {state} - potential TTS completion")
+                    try:
+                        # Register this event for TTS completion tracking
+                        from app.services.call_state_service import register_media_event
+                        if self.stream_sid:
+                            await register_media_event(self.stream_sid, "media", media_data)
+                            logger.info(f"Registered media completion event for {self.stream_sid}")
+                    except Exception as e:
+                        logger.error(f"Error registering media event: {e}")
         except Exception as e:
-            logger.error(f"Error processing audio chunk: {e}")
+            logger.error(f"Error processing media event for TTS tracking: {e}")
+        
+        # Continue with normal audio processing
+        try:
+            if "media" in data and "payload" in data.get("media", {}) and data.get("media", {}).get("track") == "inbound":
+                payload = data.get("media", {}).get("payload")
+                if payload:
+                    chunk = base64.b64decode(payload)
+                    logger.debug(f"Decoded media chunk size: {len(chunk)}")
+                    self.inbuffer.extend(chunk)
+                    
+                    # If we have enough data, send to Deepgram
+                    if len(self.inbuffer) >= self.buffer_size_bytes:
+                        await self.deepgram_service.send_audio(bytes(self.inbuffer))
+                        self.inbuffer.clear()
+        except Exception as e:
+            logger.error(f"Error processing audio data: {e}")
     
     async def _handle_stop_event(self, data: Dict[str, Any]):
         """Handle Twilio stop event"""
@@ -252,7 +298,7 @@ class AudioHandler:
         # Send any remaining audio in buffer to Deepgram
         if self.inbuffer:
             try:
-                await self.deepgram_service.send_audio(bytes(self.inbuffer))
+                await self.deepgram_service.send_audio(self.inbuffer)
                 self.inbuffer.clear()
             except Exception as e:
                 logger.error(f"Error sending final audio buffer: {e}")
@@ -260,128 +306,17 @@ class AudioHandler:
         # Mark stop event as handled
         self.stop_event_handled = True
     
-    def _extract_caller_phone(self, start_data: Dict[str, Any], full_data: Dict[str, Any] = None):
-        """Extract caller phone number from Twilio data"""
-        logger.debug(f"Attempting to extract caller phone number from Twilio data")
+    async def _handle_mark_event(self, data: Dict[str, Any]):
+        """Handle incoming mark events from Twilio."""
+        mark_name = data.get("mark", {}).get("name")
+        sequence_number = data.get("sequenceNumber")
+        stream_sid = data.get("streamSid")
+        logger.info(f"Received mark event: Name='{mark_name}', Seq={sequence_number}, Stream={stream_sid}")
         
-        # Check if full_data is a byte string (happens with raw Twilio webhook data)
-        if isinstance(full_data, bytes):
-            try:
-                # Try to decode the byte string and extract the phone number
-                raw_data = full_data.decode('utf-8')
-                logger.debug(f"Found raw request data: {raw_data[:100]}...")
-                
-                # Attempt to find a phone number pattern in the string representation of the data
-                logger.debug(f"Attempting regex extraction from data_str: {raw_data}")
-                # Regex to find potential US phone numbers (10 digits, possibly prefixed with 1 or +1)
-                # This is a basic pattern and might need refinement based on expected formats
-                match = re.search(r'(\+?1)?\s*\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})', raw_data)
-                if match:
-                    # Extract digits and format to E.164
-                    digits = "".join(filter(str.isdigit, match.group(0)))
-                    if len(digits) == 10:
-                        self.caller_phone = f"+1{digits}"
-                    elif len(digits) == 11 and digits.startswith('1'):
-                        self.caller_phone = f"+{digits}"
-                    else:
-                        # Found something number-like, but couldn't format reliably
-                        logger.warning(f"Found potential number via regex '{match.group(0)}' but couldn't format to E.164.")
-                        self.caller_phone = None # Or handle as appropriate
-                        return
+        # Optional: Add logic here if you need to react to other mark events
+        
+        # The primary logic for the final mark is handled directly in the process_twilio_messages loop
 
-                    if self.caller_phone:
-                        logger.info(f"Extracted caller phone via regex from data_str: {self.caller_phone}")
-                        return
-            except Exception as e:
-                logger.warning(f"Error parsing raw request data: {e}")
-                
-        # If not a byte string, check if it's in the 'body' field (common with FastAPI requests)
-        if isinstance(full_data, dict) and "body" in full_data and isinstance(full_data["body"], bytes):
-            try:
-                # Decode the body content
-                raw_data = full_data["body"].decode('utf-8')
-                logger.debug(f"Found request body: {raw_data[:100]}...")
-                
-                # Attempt to find a phone number pattern in the string representation of the data
-                logger.debug(f"Attempting regex extraction from data_str: {raw_data}")
-                # Regex to find potential US phone numbers (10 digits, possibly prefixed with 1 or +1)
-                # This is a basic pattern and might need refinement based on expected formats
-                match = re.search(r'(\+?1)?\s*\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})', raw_data)
-                if match:
-                    # Extract digits and format to E.164
-                    digits = "".join(filter(str.isdigit, match.group(0)))
-                    if len(digits) == 10:
-                        self.caller_phone = f"+1{digits}"
-                    elif len(digits) == 11 and digits.startswith('1'):
-                        self.caller_phone = f"+{digits}"
-                    else:
-                        # Found something number-like, but couldn't format reliably
-                        logger.warning(f"Found potential number via regex '{match.group(0)}' but couldn't format to E.164.")
-                        self.caller_phone = None # Or handle as appropriate
-                        return
-
-                    if self.caller_phone:
-                        logger.info(f"Extracted caller phone via regex from data_str: {self.caller_phone}")
-                        return
-            except Exception as e:
-                logger.warning(f"Error parsing request body: {e}")
-        
-        # If no number found by any method
-        if not self.caller_phone:
-            logger.error("Could not extract caller phone number from Twilio data.")
-            self.caller_phone = None # Explicitly set to None if not found
-            
-        # If we couldn't extract from raw data, try standard dictionary locations
-        locations = [
-            # Common Twilio webhook parameter names
-            ("From", lambda x: x.get("From")),
-            ("Caller", lambda x: x.get("Caller")),
-            ("from", lambda x: x.get("from")),
-            ("to", lambda x: x.get("to")),
-        ]
-        
-        # Try the start_data first
-        for loc_name, extractor in locations:
-            phone = extractor(start_data)
-            if phone:
-                self.caller_phone = phone
-                logger.info(f"Extracted caller phone from start_data.{loc_name}: {phone}")
-                return
-        
-        # Then try the full_data if provided
-        if isinstance(full_data, dict):
-            for loc_name, extractor in locations:
-                phone = extractor(full_data)
-                if phone:
-                    self.caller_phone = phone
-                    logger.info(f"Extracted caller phone from full_data.{loc_name}: {phone}")
-                    return
-        
-        # Last resort - check for the specific phone number we see in the logs
-        data_str = str(full_data)
-        match = re.search(r'(\+?1)?\s*\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})', data_str)
-        if match:
-            # Extract digits and format to E.164
-            digits = "".join(filter(str.isdigit, match.group(0)))
-            if len(digits) == 10:
-                self.caller_phone = f"+1{digits}"
-            elif len(digits) == 11 and digits.startswith('1'):
-                self.caller_phone = f"+{digits}"
-            else:
-                # Found something number-like, but couldn't format reliably
-                logger.warning(f"Found potential number via regex '{match.group(0)}' but couldn't format to E.164.")
-                self.caller_phone = None # Or handle as appropriate
-                return
-
-            if self.caller_phone:
-                logger.info(f"Extracted caller phone via regex from data_str: {self.caller_phone}")
-                return
-            
-        # If we get here, we couldn't find the phone number
-        logger.warning("Could not extract caller phone number from Twilio data")
-        self.caller_phone = os.getenv("FALLBACK_CALLER_ID")
-        logger.info(f"Using fallback caller ID: {self.caller_phone}")
-    
     async def process_deepgram_responses(self):
         """Process responses from Deepgram"""
         # Wait for stream_sid first if not already available
@@ -404,7 +339,28 @@ class AudioHandler:
         elif isinstance(message, bytes):
             # Handle binary messages (audio)
             await self._handle_deepgram_audio(message)
-    
+
+        # --- Add logic to handle AgentAudioDone --- 
+        if isinstance(message, dict) and message.get("type") == "AgentAudioDone":
+            logger.info(f"Received AgentAudioDone for call {self.call_sid}.")
+            if self.is_final_confirmation: 
+                logger.info("Final confirmation flag is set. Scheduling hangup.")
+                if self.call_sid:
+                    # Schedule hangup after a short delay (e.g., 1 second)
+                    async def schedule_hangup(): 
+                        await asyncio.sleep(1) # Wait 1 second
+                        logger.info(f"Executing scheduled hangup for call {self.call_sid}")
+                        result = end_call(self.call_sid)
+                        logger.info(f"Hangup result for {self.call_sid}: {result}")
+                    
+                    asyncio.create_task(schedule_hangup())
+                    self.is_final_confirmation = False # Reset the flag
+                else:
+                    logger.error("Cannot schedule hangup after AgentAudioDone: call_sid is missing.")
+                    self.is_final_confirmation = False # Reset flag even on error
+            else:
+                logger.info("AgentAudioDone received, but final confirmation flag is not set. Not hanging up.")
+
     async def _handle_deepgram_json(self, message: Dict[str, Any]):
         """Handle JSON messages from Deepgram"""
         message_type = message.get("type", "unknown")
@@ -439,6 +395,20 @@ class AudioHandler:
             if response_text:
                 logger.info(f"AGENT RESPONSE: {response_text}")
                 
+                # Check for final message metadata
+                metadata = message.get("metadata", {})
+                is_final = metadata.get("is_final_message", False)
+                utterance_id = metadata.get("utterance_id")
+                
+                if is_final and utterance_id and self.call_sid:
+                    logger.info(f"Detected final TTS message with utterance_id: {utterance_id}")
+                    try:
+                        from app.services.call_state_service import register_tts_started
+                        await register_tts_started(self.stream_sid, utterance_id)
+                        logger.info(f"Registered TTS start for final message: {utterance_id}")
+                    except Exception as e:
+                        logger.error(f"Error registering TTS start: {e}")
+                
                 # Save to database
                 if self.call_sid:
                     try:
@@ -448,7 +418,6 @@ class AudioHandler:
                         # Log the error but don't let it stop execution
                         logger.error(f"Error saving utterance: {e}")
                         # Continue processing even if database save fails
-                        
         elif message_type == "FunctionCallRequest":
             # Process function call request from Deepgram
             function_name = message.get("function_name", "")
@@ -473,6 +442,7 @@ class AudioHandler:
             # Handle function call
             try:
                 from app.handlers.function_handler import handle_function_call
+                logger.info(f"Calling handle_function_call with call_sid: {self.call_sid}")
                 await handle_function_call(
                     message,
                     self.deepgram_service,
@@ -481,6 +451,8 @@ class AudioHandler:
                     self.caller_phone,
                     self.call_sid
                 )
+                if message.get("function_name") == "order_summary" and message.get("input", {}).get("summary") == "DONE":
+                    self.is_final_confirmation = True
             except Exception as e:
                 logger.error(f"Error handling function call request: {e}")
                 # Send an error response back to keep the conversation going
@@ -575,3 +547,7 @@ class AudioHandler:
             await self.websocket.send_json(media_message)
         except Exception as e:
             logger.error(f"Error sending audio to Twilio: {e}")
+
+from app.handlers.function_handler import FINAL_AUDIO_MARK_NAME
+from app.utils.twilio import end_call
+from app.services.call_state_service import remove_call_state
