@@ -221,8 +221,12 @@ async def handle_order_summary(
 
             # 1. Generate final confirmation text (including pickup message)
             # Use the original confirmation text and add the pickup part
-            final_confirmation_text = f"{confirmation_text} Your order will be ready for pickup shortly."
+            final_confirmation_text = f"{confirmation_text} This is confirmation text."
             logger.info(f"Generated final confirmation text: {final_confirmation_text}")
+
+            # deepgram_service.is_final_confirmation = True
+            # logger.info("Set final confirmation flag in Deepgram service")
+
 
             # Send the final confirmation message text back to Deepgram
             # Deepgram Agent will handle TTS generation and send audio back

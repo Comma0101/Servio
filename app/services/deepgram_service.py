@@ -43,6 +43,19 @@ class DeepgramService:
                     "Authorization": f"Token {self.api_key}"
                 }
                 
+                # Add instructions to control conversation ending
+                if "agent" not in self.config:
+                    self.config["agent"] = {}
+                if "think" not in self.config["agent"]:
+                    self.config["agent"]["think"] = {}
+                
+                # Add instructions to prevent additional messages
+                base_instructions = self.config["agent"]["think"].get("instructions", "")
+                self.config["agent"]["think"]["instructions"] = (
+                    base_instructions +
+                    "\nDo not add any messages after a function response marked as final. " 
+                )
+                
                 self.websocket = await websockets.connect(
                     'wss://agent.deepgram.com/agent',
                     extra_headers=extra_headers,
@@ -54,6 +67,7 @@ class DeepgramService:
                 
                 # Send initial configuration
                 await self.send_configuration(self.config)
+                logger.info("Sent configuration with updated instructions to Deepgram")
                 
                 return self.websocket
             except Exception as e:

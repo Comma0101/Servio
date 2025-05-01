@@ -348,7 +348,7 @@ class AudioHandler:
                 if self.call_sid:
                     # Schedule hangup after a short delay (e.g., 1 second)
                     async def schedule_hangup(): 
-                        await asyncio.sleep(1) # Wait 1 second
+                        await asyncio.sleep(2) # Wait 2 seconds
                         logger.info(f"Executing scheduled hangup for call {self.call_sid}")
                         result = end_call(self.call_sid)
                         logger.info(f"Hangup result for {self.call_sid}: {result}")
