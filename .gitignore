@@ -20,3 +20,9 @@ flask_session/
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# Sensitive credential files
+app/parabolic-wall-459005-u5-55f740733ce9.json
+
+#windsurfrules
+.windsurfrules
