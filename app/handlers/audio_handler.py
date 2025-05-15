@@ -196,8 +196,8 @@ class AudioHandler:
             except Exception as e:
                 logger.error(f"Error saving call start: {e}")
             
-            # Default to English initially
-            self.language = "english"
+            # Language is already set during __init__ and is fixed for this handler.
+            # No need to set self.language = "english" here.
             
             # IMPORTANT: Set a flag to send the welcome message once Deepgram is ready
             self.send_welcome_on_connection = True
