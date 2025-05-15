@@ -166,7 +166,7 @@ async def save_call_end(call_sid: str, audio_url: Optional[str] = None):
         logger.error(f"Error saving call end: {e}")
         return False
 
-async def save_utterance(call_sid: str, speaker: str, text: str, confidence: float = 1.0):
+async def save_utterance(call_sid: str, speaker: str, text: str, confidence: float = 1.0, language: str = None):
     """Save an utterance to the database"""
     try:
         pool = await get_db_pool()

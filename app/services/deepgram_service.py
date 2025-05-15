@@ -49,12 +49,35 @@ class DeepgramService:
                 if "think" not in self.config["agent"]:
                     self.config["agent"]["think"] = {}
                 
-                # Add instructions to prevent additional messages
+                # Determine the language based on the speak model
+                is_chinese = False
+                if "agent" in self.config and "speak" in self.config["agent"]:
+                    speak_model = self.config["agent"]["speak"].get("model", "")
+                    if "zh" in speak_model or "zh-CN" in speak_model:
+                        is_chinese = True
+                        logger.info("Detected Chinese voice model, adding Chinese instructions")
+                
+                # Add instructions to prevent additional messages in the appropriate language
                 base_instructions = self.config["agent"]["think"].get("instructions", "")
-                self.config["agent"]["think"]["instructions"] = (
-                    base_instructions +
-                    "\nDo not add any messages after a function response marked as final. " 
-                )
+                
+                if is_chinese:
+                    # Chinese version of the instructions
+                    self.config["agent"]["think"]["instructions"] = (
+                        base_instructions +
+                        "\n请不要在标记为最终的函数响应后添加任何消息。" 
+                    )
+                    logger.info("Added Chinese instructions about function responses")
+                else:
+                    # English version of the instructions
+                    self.config["agent"]["think"]["instructions"] = (
+                        base_instructions +
+                        "\nDo not add any messages after a function response marked as final." 
+                    )
+                    logger.info("Added English instructions about function responses")
+                
+                # Log detailed configuration before connection (sanitize API keys)
+                sanitized_config = json.dumps(self.config)
+                logger.info(f"Connecting to Deepgram with configuration: {sanitized_config}")
                 
                 self.websocket = await websockets.connect(
                     'wss://agent.deepgram.com/agent',
@@ -141,6 +164,24 @@ class DeepgramService:
             return
         
         try:
+            # Check if this is a message to the Chinese voice model
+            is_chinese_message = False
+            if self.config and 'agent' in self.config and 'speak' in self.config['agent']:
+                speak_model = self.config['agent']['speak'].get('model', '')
+                if 'zh' in speak_model and data.get('type') == 'InjectAgentMessage':
+                    is_chinese_message = True
+                    logger.info("Detected message for Chinese voice model")
+                    
+                    # For Chinese voice model, we need to ensure the message is properly formatted
+                    message = data.get('message', '')
+                    
+                    # Check if message contains any non-Chinese characters
+                    if any(not ('\u4e00' <= c <= '\u9fff' or c in '。，！？；：（）《》""''、') for c in message):
+                        logger.warning(f"Message contains non-Chinese characters, which may cause errors: {message}")
+                    
+                    # Log the exact message being sent for debugging
+                    logger.info(f"Chinese message content: {message}")
+            
             json_data = json.dumps(data)
             await self.websocket.send(json_data)
             logger.info(f"Sent JSON data to Deepgram: {data.get('type', 'unknown type')}")

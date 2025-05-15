@@ -13,3 +13,4 @@ asyncpg
 psycopg2-binary==2.9.9
 boto3==1.33.13
 websockets==11.0.3
+pydub==0.25.1

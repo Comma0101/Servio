@@ -105,6 +105,7 @@ async def test_create_order_endpoint(order_data):
     url = "http://127.0.0.1:5050/api/v1/create-order"
     data = {"items": items}
 
+    print(f"DEBUG: Attempting to POST to URL: {url} with data: {data}")  # Added log
     response = await asyncio.to_thread(requests.post, url, json=data)
     return response.json()
 

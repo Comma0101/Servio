@@ -36,3 +36,21 @@ def get_restaurant_menu(restaurant_id: str = None):
         menu_items = menu_json
     
     return menu_items
+
+def get_keywords(restaurant_id: str = None):
+    """Get keywords for speech recognition from constants"""
+    config = get_restaurant_config(restaurant_id)
+    keywords = config.get("KEYWORDS", [])
+    
+    # Handle both string and list format
+    if isinstance(keywords, str):
+        try:
+            keywords_list = json.loads(keywords)
+        except json.JSONDecodeError:
+            logger.error("Error parsing keywords JSON")
+            keywords_list = []
+    else:
+        keywords_list = keywords
+    
+    logger.info(f"Retrieved {len(keywords_list)} keywords for speech recognition")
+    return keywords_list
