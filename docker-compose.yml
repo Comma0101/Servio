@@ -1,0 +1,58 @@
+services:
+  app:
+    build: .
+    image: servio-app:v19
+    # Create 3 instances of the app service
+    deploy:
+      replicas: 3
+    # Load environment variables from a .env file in the same directory
+    env_file:
+      - .env
+    # Set environment variables directly to ensure correct DB connection in Docker
+    environment:
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+      - PUBLIC_BASE_URL=https://546f-2600-6c50-5af0-97d0-00-149d.ngrok-free.app
+    volumes:
+      - ./app:/app/app
+    depends_on:
+      - postgres
+      - redis
+
+  nginx:
+    image: nginx:1.21-alpine
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8000:80"
+    depends_on:
+      - app
+
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      - POSTGRES_DB=servio
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

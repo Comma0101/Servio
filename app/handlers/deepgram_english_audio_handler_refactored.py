@@ -5,24 +5,26 @@ import asyncio
 import base64
 import json
 import logging
-import re
 from fastapi import WebSocket
-import os
 from typing import Optional, Dict, Any
 import traceback
 import time
+import uuid
 
 from app.services.deepgram_service import DeepgramService
-from app.handlers.function_handler import FINAL_AUDIO_MARK_NAME
+from app.handlers.english_tool_logic import FINAL_AUDIO_MARK_NAME
 from app.utils.twilio import end_call
 from app.services.call_state_service import remove_call_state
+from starlette.websockets import WebSocketState
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class AudioHandler:
-    """Handler for processing audio streams between Twilio and Deepgram"""
+FINAL_HANGUP_MARK_NAME = "final_hangup_mark"
+
+class DeepgramEnglishAudioHandler():
+    """Handler for processing audio streams between Twilio and Deepgram for English"""
     
     def __init__(self, websocket, client_id=None, deepgram_api_key=None, system_message=None, function_definitions=None, language=None):
         """Initialize the audio handler"""
@@ -60,6 +62,11 @@ class AudioHandler:
         self.order_processed = False
         self.is_final_confirmation = False
         self.stop_event_handled = False
+        self._stop_processing_deepgram = False # For graceful shutdown of process_deepgram_responses
+        self.agent_is_speaking = False
+        self.stop_event = asyncio.Event()
+        self.cleared_event = asyncio.Event()
+        self.connection_closed = asyncio.Event()
         
         # Initialize a queue for sharing stream SID with other tasks
         self.streamsid_queue = asyncio.Queue()
@@ -77,8 +84,6 @@ class AudioHandler:
     @property
     def language(self):
         return self._language
-
-    # Removed language.setter as language is fixed on initialization
 
     async def process_twilio_messages(self):
         """Process messages from Twilio WebSocket"""
@@ -165,7 +170,7 @@ class AudioHandler:
         logger.info(f"Received start event data: {json.dumps(data)}")
         try:
             self.stream_sid = data.get("streamSid")
-            self.call_sid = data.get("start", {}).get("callSid") 
+            self.call_sid = data.get("start", {}).get("callSid")
             
             if self.call_sid is None or self.call_sid == "":
                 logger.critical(f"CRITICAL ERROR: callSid is missing, None, or empty in start event data for stream {self.stream_sid}. Raw data: {json.dumps(data)}. Cannot proceed.")
@@ -202,29 +207,8 @@ class AudioHandler:
             # IMPORTANT: Set a flag to send the welcome message once Deepgram is ready
             self.send_welcome_on_connection = True
 
-            # Send menu via SMS if applicable (similar to GitHub repo)
-            if self.client_id and not self.menu_sms_sent and self.caller_phone:
-                try:
-                    from app.utils.constants import get_restaurant_menu
-                    from app.utils.menu_formatter import format_menu_for_sms
-                    from app.utils.twilio import send_sms
-
-                    menu_items = get_restaurant_menu(self.client_id)
-                    if menu_items:
-                        logger.info(f"Formatting menu with {len(menu_items)} items for SMS for client {self.client_id}")
-                        menu_text_sms = format_menu_for_sms(menu_items, self.client_id)
-                        send_sms(self.caller_phone, menu_text_sms, self.client_id)
-                        self.menu_sms_sent = True
-                        logger.info(f"Sent initial menu via SMS to {self.caller_phone} for client {self.client_id}")
-                    else:
-                        logger.warning(f"No menu items found for client {self.client_id}, not sending menu SMS.")
-                except Exception as e_sms:
-                    logger.error(f"Error sending initial menu via SMS: {e_sms}")
-            
         except Exception as e:
             logger.error(f"Error handling start event: {e}")
-
-    # Removed _update_deepgram_language method as language is fixed on initialization
 
     async def _speak_text(self, text: str):
         """
@@ -277,10 +261,19 @@ class AudioHandler:
                     chunk = base64.b64decode(payload)
                     logger.debug(f"Decoded media chunk size: {len(chunk)}")
                     self.inbuffer.extend(chunk)
+                    self.complete_audio_buffer.extend(chunk) # Accumulate for S3 upload
                     
                     if len(self.inbuffer) >= self.buffer_size_bytes:
-                        await self.deepgram_service.send_audio(bytes(self.inbuffer))
-                        self.inbuffer.clear()
+                        if self.deepgram_service:
+                            # ensure_alive is expected to be called within deepgram_service.send_audio
+                            success = await self.deepgram_service.send_audio(bytes(self.inbuffer))
+                            if success:
+                                self.inbuffer.clear()
+                            else:
+                                logger.warning("Failed to send audio to Deepgram (send_audio returned False). Audio remains in buffer.")
+                        else:
+                            logger.error("Cannot send audio to Deepgram: deepgram_service is not initialized.")
+                    
         except Exception as e:
             logger.error(f"Error processing audio data: {e}")
     
@@ -339,13 +332,16 @@ class AudioHandler:
             digit = data.get("mark", {}).get("digit")
             logger.info(f"Received DTMF digit via mark event: {digit}, but language switching is handled at call start")
         
-        if mark_name == FINAL_AUDIO_MARK_NAME:
-            logger.info(f"Received final message mark '{mark_name}'. Initiating immediate hangup.")
-            if self.call_sid:
-                result = end_call(self.call_sid) 
-                logger.info(f"Hangup initiated via REST API due to mark event. Result: {result}")
-            else:
-                logger.error("Cannot hang up after mark event: call_sid is missing.")
+        if mark_name == FINAL_HANGUP_MARK_NAME:
+            logger.info(f"Final hangup mark received. Scheduling hangup.")
+            async def schedule_hangup():
+                await asyncio.sleep(1.5) # Wait 1.5 seconds
+                logger.info(f"Executing scheduled hangup for call {self.call_sid}")
+                result = end_call(self.call_sid)
+                logger.info(f"Hangup result: {result}")
+            asyncio.create_task(schedule_hangup())
+        elif mark_name == FINAL_AUDIO_MARK_NAME:
+            logger.info(f"Received final message mark '{mark_name}'. This is now deprecated in favor of '{FINAL_HANGUP_MARK_NAME}'. Ignoring.")
 
     async def process_deepgram_responses(self):
         """Process responses from Deepgram"""
@@ -362,9 +358,34 @@ class AudioHandler:
         
         self.deepgram_service.add_message_handler(self._handle_deepgram_message)
         
-        await self.deepgram_service.receive_messages()
+        # Robust loop for receiving messages with reconnection logic
+        active = True
+        while active and not self._stop_processing_deepgram:
+            try:
+                is_connected = await self.deepgram_service.ensure_alive() # Ensure connection before listening
+                if not is_connected:
+                    logger.error("Failed to ensure Deepgram connection. Waiting before retrying listener.")
+                    await asyncio.sleep(5) 
+                    continue
 
-    async def _handle_deepgram_close(self):
+                logger.info("Starting/Resuming Deepgram message receiving...")
+                await self.deepgram_service.receive_messages() # Blocks until error/close
+                
+                # If it returns, connection was likely closed by server or an issue occurred.
+                logger.warning("Deepgram receive_messages exited. Will attempt to re-ensure connection in the next loop iteration if not stopping.")
+                if not self._stop_processing_deepgram: # Avoid sleep if we are trying to stop
+                    await asyncio.sleep(1) 
+
+            except asyncio.CancelledError:
+                logger.info("Deepgram response processing task cancelled.")
+                active = False
+            except Exception as e:
+                logger.error(f"Critical error in process_deepgram_responses loop: {e}")
+                active = False 
+        logger.info("Exited Deepgram response processing loop.")
+
+
+    async def _handle_deepgram_close(self): # This might be redundant if DeepgramService handles its state
         """Handle Deepgram connection closure."""
         logger.info(f"Deepgram connection closed for call_sid: {self.call_sid}")
         self.deepgram_ready = False
@@ -393,58 +414,75 @@ class AudioHandler:
                 except Exception as e:
                     logger.error(f"Error sending welcome message after connection ready: {e}")
         
-        # Handle AgentAudioDone event
-        if isinstance(message, dict) and message.get("type") == "AgentAudioDone":
-            logger.info(f"Received AgentAudioDone for call {self.call_sid}.")
-            if self.is_final_confirmation: 
-                logger.info(f"Final confirmation received for call {self.call_sid}. Scheduling hangup.")
-                if self.call_sid:
-                    async def schedule_hangup(): 
-                        await asyncio.sleep(2) # Wait 2 seconds
-                        logger.info(f"Executing scheduled hangup for call {self.call_sid}")
-                        result = end_call(self.call_sid)
-                        logger.info(f"Hangup result: {result}")
-                    
-                    asyncio.create_task(schedule_hangup())
-                else:
-                    logger.error("Cannot schedule hangup after AgentAudioDone: call_sid is missing.")
-                    self.is_final_confirmation = False # Reset flag even on error
+        # Specific event handling is now primarily in _handle_deepgram_json
+        # However, AgentAudioDone might still be processed here if it's not exclusively a JSON message type
+        # or if _handle_deepgram_message is the sole dispatcher.
+        # For now, assuming AgentAudioDone is a JSON message handled in _handle_deepgram_json.
 
     async def _handle_deepgram_json(self, message: Dict[str, Any]):
         """Handle JSON messages from Deepgram"""
         message_type = message.get("type", "unknown")
-        logger.info(f"Handling Deepgram message of type: {message_type}")
         
-        if message_type == "SpeechRecognitionResult":
+        if message_type == "UserStartedSpeaking":
+            logger.info(f"Barge-in detected: User started speaking. Call SID: {self.call_sid}")
+            clear_message = {
+                "event": "clear",
+                "streamSid": self.stream_sid
+            }
+            try:
+                await self.websocket.send_text(json.dumps(clear_message))
+                logger.info(f"Sent 'clear' event to Twilio for stream {self.stream_sid}.")
+            except Exception as e:
+                logger.error(f"Error sending 'clear' event to Twilio: {e}")
+        
+        elif message_type == "SpeechRecognitionResult":
             speech_data = message.get("speech", {})
-            is_final = speech_data.get("is_final", False)
             alternatives = speech_data.get("alternatives", [])
-            
-            if alternatives and is_final:
-                transcript = alternatives[0].get("transcript", "")
-                confidence = alternatives[0].get("confidence", 0.0)
-                
-                if transcript:
-                    logger.info(f"TRANSCRIPT: {transcript} (confidence: {confidence:.2f})")
-                    
-                    if self.call_sid:
-                        try:
-                            from app.services.database_service import save_utterance
-                            await save_utterance(self.call_sid, "user", transcript, confidence)
-                        except Exception as e:
-                            logger.error(f"Error saving utterance: {e}")
+            transcript = alternatives[0].get("transcript", "") if alternatives else ""
+            is_final = speech_data.get("is_final", False) # Or check for interim flags
+
+            # Continue with existing transcript processing logic
+            if transcript:
+                confidence = alternatives[0].get("confidence", 0.0) if alternatives else 0.0
+                logger.info(f"TRANSCRIPT (user): {transcript} (confidence: {confidence:.2f})")
+                if self.call_sid:
+                    try:
+                        from app.services.database_service import save_utterance
+                        await save_utterance(self.call_sid, "user", transcript, confidence)
+                    except Exception as e:
+                        logger.error(f"Error saving utterance: {e}")
         
-        elif message_type == "AgentResponse":
-            response_text = message.get("response", "")
-            
+        elif message_type == "ConversationText" and message.get("role") == "assistant":
+            if message.get("content"): # Ensure there's actual content
+                if not self.agent_is_speaking:
+                    self.agent_is_speaking = True
+                    logger.info(f"Agent is now speaking (ConversationText from assistant). Call SID: {self.call_sid}")
+            # Process the actual content of AgentResponse / ConversationText
+            response_text = message.get("content", "") # Use "content" for ConversationText
             if response_text:
-                logger.info(f"AGENT RESPONSE: {response_text}")
+                logger.info(f"AGENT RESPONSE (ConversationText): {response_text}")
+                # Metadata handling might be different for ConversationText vs AgentResponse
+                # For now, just save the utterance
+                if self.call_sid:
+                    try:
+                        from app.services.database_service import save_utterance
+                        await save_utterance(self.call_sid, "agent", response_text) # role is "assistant"
+                    except Exception as e:
+                        logger.error(f"Error saving agent ConversationText utterance: {e}")
+
+        elif message_type == "AgentResponse": # Original AgentResponse handling for other purposes (e.g. metadata)
+            response_text = message.get("response", "")
+            # This block might now be partially redundant if ConversationText is the primary way agent speech is conveyed
+            # However, AgentResponse might carry other metadata or be used for non-speech responses.
+            if response_text:
+                # agent_is_speaking state is now primarily set by ConversationText from assistant
+                logger.info(f"AGENT RESPONSE (raw AgentResponse type): {response_text}")
                 
                 metadata = message.get("metadata", {})
-                is_final = metadata.get("is_final_message", False)
+                is_final_message_flag = metadata.get("is_final_message", False)
                 utterance_id = metadata.get("utterance_id")
                 
-                if is_final and utterance_id and self.call_sid:
+                if is_final_message_flag and utterance_id and self.call_sid:
                     logger.info(f"Detected final TTS message with utterance_id: {utterance_id}")
                     try:
                         from app.services.call_state_service import register_tts_started
@@ -453,103 +491,119 @@ class AudioHandler:
                     except Exception as e:
                         logger.error(f"Error registering TTS start: {e}")
                 
-                if self.call_sid:
+                if self.call_sid: # Save if not already saved by ConversationText handler
                     try:
                         from app.services.database_service import save_utterance
                         await save_utterance(self.call_sid, "agent", response_text)
                     except Exception as e:
-                        logger.error(f"Error saving utterance: {e}")
-        
-        elif message_type == "FunctionCallRequest":
-            function_name = message.get("function_name", "")
-            function_call_id = message.get("function_call_id", "")
-            input_data = message.get("input", {})
+                        logger.error(f"Error saving agent AgentResponse utterance: {e}")
+
+        elif message_type == "AgentAudioDone":
+            logger.info(f"Received AgentAudioDone for call {self.call_sid}.")
+            if self.agent_is_speaking:
+                self.agent_is_speaking = False
+                logger.info(f"Agent finished speaking (AgentAudioDone). Call SID: {self.call_sid}")
             
-            logger.info(f"FUNCTION CALL REQUEST: {function_name} with ID: {function_call_id}")
-            logger.info(f"Function input data: {json.dumps(input_data)}")
-            
-            if self.call_sid:
-                try:
-                    from app.services.database_service import save_utterance
-                    await save_utterance(
-                        self.call_sid,
-                        "system_function",
-                        f"Function: {function_name}, Input: {json.dumps(input_data)}"
-                    )
-                except Exception as e:
-                    logger.error(f"Error saving function call to database: {e}")
-            
-            try:
-                from app.handlers.function_handler import handle_function_call
-                logger.info(f"Calling handle_function_call with call_sid: {self.call_sid}")
-                await handle_function_call(
-                    message,
-                    self.deepgram_service,
-                    self.websocket,
-                    self.stream_sid,
-                    self.caller_phone,
-                    self.call_sid
-                )
-                if message.get("function_name") == "order_summary" and message.get("input", {}).get("summary") == "DONE":
-                    self.is_final_confirmation = True
-            except Exception as e:
-                logger.error(f"Error handling function call request: {e}")
-                try:
-                    error_response = {
-                        "type": "FunctionCallResponse",
-                        "function_call_id": function_call_id,
-                        "output": "Sorry, there was an error processing your request."
+            if self.is_final_confirmation:
+                logger.info(f"Final confirmation audio finished. Sending hangup mark to Twilio.")
+                if self.websocket and self.stream_sid and self.websocket.client_state == WebSocketState.CONNECTED:
+                    mark_message = {
+                        "event": "mark",
+                        "streamSid": self.stream_sid,
+                        "mark": {
+                            "name": FINAL_HANGUP_MARK_NAME
+                        }
                     }
-                    await self.deepgram_service.send_json(error_response)
-                    logger.info(f"Sent error response for function call {function_call_id}")
-                except Exception as e2:
-                    logger.error(f"Error sending error response: {e2}")
-        
-        elif message_type == "ConversationText":
-            role = message.get("role", "")
-            content = message.get("content", "")
-            
-            logger.info(f"{role.upper()} TEXT: {content}")
-            
-            if role == "assistant" and "{" in content and "}" in content and not self.order_processed:
+                    await self.websocket.send_text(json.dumps(mark_message))
+                    logger.info(f"Sent final hangup mark: {FINAL_HANGUP_MARK_NAME}")
+                else:
+                    logger.error("Cannot send hangup mark: WebSocket is not connected or stream_sid is missing.")
+                self.is_final_confirmation = False # Reset flag
+
+        elif message_type == "Cleared":
+            logger.info(f"Received 'Cleared' acknowledgement from Deepgram. Call SID: {self.call_sid}")
+            self.cleared_event.set()
+
+        elif message_type == "FunctionCallRequest":
+            functions_to_call = message.get("functions", [])
+            if not functions_to_call:
+                logger.warning("Received FunctionCallRequest with no functions listed.")
+                return
+
+            for func_data in functions_to_call:
+                function_call_id = func_data.get("id")
+                function_name = func_data.get("name")
+                arguments_str = func_data.get("arguments", "{}")
+                client_side = func_data.get("client_side", True) # Default to True if missing
+
+                if not client_side:
+                    logger.info(f"Skipping server-side function call: {function_name} (ID: {function_call_id})")
+                    continue
+
                 try:
-                    json_start = content.find("{")
-                    json_end = content.rfind("}") + 1
-                    if json_start >= 0 and json_end > json_start:
-                        json_str = content[json_start:json_end]
-                        logger.info(f"Extracted JSON data: {json_str}")
-                        
-                        input_data = json.loads(json_str)
-                        logger.info(f"Parsed order data: {input_data}")
-                        
-                        if "items" in input_data and ("total_price" in input_data or "total" in input_data):
-                            logger.info("Detected order data in conversation text")
-                            
-                            if not self.order_processed:
-                                logger.info("Setting order_processed flag - actual processing happens in function_handler.py")
-                                self.order_processed = True
-                                
-                                order_items = input_data.get("items", [])
-                                total_price = input_data.get("total_price", input_data.get("total", 0))
-                                summary_status = input_data.get("summary", input_data.get("status", "IN PROGRESS"))
-                                
-                                logger.info(f"Detected order - Items: {order_items}, Total: {total_price}, Status: {summary_status}")
-                                logger.info("Order will not be processed here - using function_handler.py instead")
-                            else:
-                                logger.info("Order already processed, skipping duplicate detection")
-                except Exception as e:
-                    logger.error(f"Error processing potential order data: {e}")
-                    logger.error(f"Exception details: {traceback.format_exc()}")
-            
-            if self.call_sid:
+                    input_data = json.loads(arguments_str)
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to parse arguments for function {function_name} (ID: {function_call_id}): {arguments_str}")
+                    if function_call_id:
+                        error_response = {
+                            "type": "FunctionCallResponse",
+                            "function_call_id": function_call_id,
+                            "output": "Invalid arguments format provided by the agent."
+                        }
+                        if self.deepgram_service:
+                            await self.deepgram_service.send_json(error_response)
+                        else:
+                            logger.error("Cannot send FunctionCallResponse for JSON parse error: deepgram_service not available.")
+                    continue
+
+                logger.info(f"Dispatching function call: {function_name} with ID: {function_call_id}")
+
+                reformatted_function_request = {
+                    "function_name": function_name,
+                    "function_call_id": function_call_id,
+                    "input": input_data
+                }
+
                 try:
-                    from app.services.database_service import save_utterance
-                    await save_utterance(self.call_sid, role, content)
+                    from app.handlers.english_tool_logic import handle_function_call
+                    await handle_function_call(
+                        reformatted_function_request,
+                        self.deepgram_service,
+                        self.websocket,
+                        self.stream_sid,
+                        self.caller_phone,
+                        self.call_sid,
+                        self.client_id
+                    )
+                    if function_name == "order_summary" and input_data.get("summary") == "DONE":
+                        self.is_final_confirmation = True
                 except Exception as e:
-                    logger.error(f"Error saving utterance: {e}")
+                    logger.error(f"Error handling function call request for {function_name} (ID: {function_call_id}): {e}", exc_info=True)
+                    if function_call_id:
+                        error_response = {
+                            "type": "FunctionCallResponse",
+                            "function_call_id": function_call_id,
+                            "output": "Sorry, there was an error processing your request."
+                        }
+                        if self.deepgram_service:
+                            await self.deepgram_service.send_json(error_response)
+                        else:
+                            logger.error("Cannot send FunctionCallResponse for unhandled exception: deepgram_service not available.")
+
+
+        # The original generic "ConversationText" handler (which included order parsing)
+        # is now effectively replaced by:
+        # 1. The specific "ConversationText" handler for `role == "assistant"` (for agent_is_speaking logic and saving agent text).
+        # 2. The "SpeechRecognitionResult" handler (for saving user text).
+        # 3. The "FunctionCallRequest" handler (for structured actions like order processing).
+        # This should cover all previous functionalities in a more organized way.
 
     async def _handle_deepgram_audio(self, audio_data: bytes):
         """Handle binary audio data from Deepgram"""
+        if self.connection_closed.is_set():
+            logger.warning("Connection is closing, skipping sending audio to Twilio.")
+            return
+
         if not self.stream_sid:
             logger.warning("Received audio from Deepgram but no Stream SID available")
             return
@@ -566,8 +620,17 @@ class AudioHandler:
             }
             
             await self.websocket.send_json(media_message)
+            
+            # Append the agent's audio (audio_data from Deepgram, confirmed to be mulaw) 
+            # to the complete_audio_buffer for S3 recording.
+            if audio_data:
+                self.complete_audio_buffer.extend(audio_data)
+                
         except Exception as e:
-            logger.error(f"Error sending audio to Twilio: {e}")
+            if "Unexpected ASGI message 'websocket.send', after sending 'websocket.close'" in str(e):
+                logger.warning(f"Tried to send audio after websocket was closed: {e}")
+            else:
+                logger.error(f"Error sending agent audio to Twilio or appending to S3 buffer: {e}")
 
     async def _send_welcome_message(self):
         """Send welcome message to the caller"""
@@ -590,7 +653,7 @@ class AudioHandler:
             logger.info(f"Language for welcome message: {self.language}")
             
             # English welcome message
-            welcome_message = f"Welcome to {restaurant_name}. I'm your voice assistant, how can I help you today?"
+            welcome_message = f"Welcome to {restaurant_name}. Are you ready to order, or would you like me to text you a link to our menu first?"
             logger.info(f"Using English welcome message: {welcome_message}")
             
             # Send welcome message

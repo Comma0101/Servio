@@ -12,87 +12,112 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class DeepgramService:
-    """Service for handling communications with the Deepgram Voice Agent API"""
-    
-    def __init__(self, api_key: str, config: Dict[str, Any]):
+    """Service for handling communications with the Deepgram API (Agent and STT)"""
+
+    def __init__(self, api_key: str, config: Dict[str, Any], use_stt_endpoint: bool = False, stop_event: Optional[asyncio.Event] = None):
         """
         Initialize the Deepgram service.
-        
+
         Args:
             api_key: Deepgram API key
-            config: Configuration for the Deepgram API 
+            config: Configuration for the Deepgram API
+            use_stt_endpoint: If True, connect to /v1/listen for STT. Otherwise, agent endpoint.
+            stop_event: An asyncio Event to signal when to stop processing.
         """
         self.api_key = api_key
         self.config = config
+        self.use_stt_endpoint = use_stt_endpoint
+        self.stop_event = stop_event
         self.websocket: Optional[websockets.WebSocketClientProtocol] = None
         self.connected = False
         self.message_handlers: List[Callable[[Dict[str, Any]], Awaitable[None]]] = []
-        
-        logger.info("Initialized Deepgram service")
-        
+
+        logger.info(f"Initialized Deepgram service (STT mode: {self.use_stt_endpoint})")
+
     async def connect(self) -> None:
-        """Connect to the Deepgram Voice Agent API"""
+        """Connect to the Deepgram API (Agent or STT endpoint)"""
+        logger.info(f"Connect method called. Stop event status: {self.stop_event.is_set() if self.stop_event else 'Not set'}")
         max_retries = 3
         retry_count = 0
         retry_delay = 1  # seconds
-        
+
         while retry_count < max_retries:
+            if self.stop_event and self.stop_event.is_set():
+                logger.info("Stop event is set, aborting Deepgram connection attempt.")
+                return
+
             try:
-                # Create extra headers with API key authorization
-                extra_headers = {
-                    "Authorization": f"Token {self.api_key}"
-                }
+                extra_headers = {"Authorization": f"Token {self.api_key}"}
                 
-                # Add instructions to control conversation ending
-                if "agent" not in self.config:
-                    self.config["agent"] = {}
-                if "think" not in self.config["agent"]:
-                    self.config["agent"]["think"] = {}
-                
-                # Determine the language based on the speak model
-                is_chinese = False
-                if "agent" in self.config and "speak" in self.config["agent"]:
-                    speak_model = self.config["agent"]["speak"].get("model", "")
-                    if "zh" in speak_model or "zh-CN" in speak_model:
-                        is_chinese = True
-                        logger.info("Detected Chinese voice model, adding Chinese instructions")
-                
-                # Add instructions to prevent additional messages in the appropriate language
-                base_instructions = self.config["agent"]["think"].get("instructions", "")
-                
-                if is_chinese:
-                    # Chinese version of the instructions
-                    self.config["agent"]["think"]["instructions"] = (
-                        base_instructions +
-                        "\n请不要在标记为最终的函数响应后添加任何消息。" 
+                if self.use_stt_endpoint:
+                    # Connect to dedicated STT endpoint: wss://api.deepgram.com/v1/listen
+                    # STT parameters are passed as query parameters
+                    stt_params = self.config.get("listen", {})
+                    stt_params = self.config.get("listen", {})
+                    query_string_parts = []
+                    
+                    for key, value in stt_params.items():
+                        if value is not None: # Ensure boolean False is handled correctly if needed
+                             query_string_parts.append(f"{key}={str(value).lower() if isinstance(value, bool) else value}")
+                    
+                    # Default to interim_results=False, smart_format=True if not specified for STT
+                    if "interim_results" not in stt_params: query_string_parts.append("interim_results=false")
+                    if "smart_format" not in stt_params: query_string_parts.append("smart_format=true")
+                    if "punctuate" not in stt_params: query_string_parts.append("punctuate=true")
+
+
+                    # Ensure essential parameters are present for STT
+                    if "model" not in stt_params:
+                        logger.warning("STT config missing 'model', defaulting to 'nova-2-general'")
+                        query_string_parts.append("model=nova-2-general") # Or handle as error
+                    if "encoding" not in stt_params:
+                         logger.warning("STT config missing 'encoding', defaulting to 'linear16'")
+                         query_string_parts.append("encoding=linear16") # Or handle as error
+                    if "sample_rate" not in stt_params:
+                         logger.warning("STT config missing 'sample_rate', defaulting to 16000")
+                         query_string_parts.append("sample_rate=16000")
+
+
+                    query_string = "&".join(query_string_parts)
+                    connect_url = f"wss://api.deepgram.com/v1/listen?{query_string}"
+                    
+                    logger.info(f"Connecting to Deepgram STT endpoint: {connect_url}")
+                    self.websocket = await websockets.connect(
+                        connect_url,
+                        extra_headers=extra_headers,
+                        ping_interval=30,
+                        ping_timeout=10
                     )
-                    logger.info("Added Chinese instructions about function responses")
-                else:
-                    # English version of the instructions
-                    self.config["agent"]["think"]["instructions"] = (
-                        base_instructions +
-                        "\nDo not add any messages after a function response marked as final." 
+                    logger.info("Connected to Deepgram STT API (/v1/listen)")
+                    self.connected = True
+                    # For STT endpoint, no initial JSON config message is sent.
+                    # Readiness can be assumed after connection, or handler can wait for first Metadata message.
+                    # We will notify handlers that settings are "applied" conceptually.
+                    for handler in self.message_handlers:
+                        await handler({"type": "STTConnected", "description": "Successfully connected to /v1/listen"})
+
+                else: # Original Agent Endpoint Logic
+                    # Add instructions to control conversation ending
+                    if "agent" not in self.config: self.config["agent"] = {}
+                    if "think" not in self.config["agent"]: self.config["agent"]["think"] = {}
+                    # The 'instructions' field is now expected to be fully formed in self.config
+                    # No suffix will be appended here.
+                                        
+                    sanitized_config = json.dumps(self.config) # Consider more robust sanitization
+                    logger.info(f"Connecting to Deepgram Agent with configuration: {sanitized_config}")
+                    
+                    self.websocket = await websockets.connect(
+                        'wss://agent.deepgram.com/v1/agent/converse',
+                        extra_headers=extra_headers,
+                        ping_interval=30,
+                        ping_timeout=10
                     )
-                    logger.info("Added English instructions about function responses")
-                
-                # Log detailed configuration before connection (sanitize API keys)
-                sanitized_config = json.dumps(self.config)
-                logger.info(f"Connecting to Deepgram with configuration: {sanitized_config}")
-                
-                self.websocket = await websockets.connect(
-                    'wss://agent.deepgram.com/agent',
-                    extra_headers=extra_headers,
-                    ping_interval=30,  # Send ping every 30 seconds to keep connection alive
-                    ping_timeout=10    # Wait 10 seconds for pong before considering connection dead
-                )
-                logger.info("Connected to Deepgram Voice Agent API")
-                self.connected = True
-                
-                # Send initial configuration
-                await self.send_configuration(self.config)
-                logger.info("Sent configuration with updated instructions to Deepgram")
-                
-                return self.websocket
+                    logger.info("Connected to Deepgram Voice Agent API")
+                    self.connected = True
+                    await self.send_configuration(self.config) # Send initial config for agent
+                    logger.info("Sent configuration (without suffix modification) to Deepgram Agent")
+
+                return self.websocket # type: ignore
             except Exception as e:
                 logger.error(f"Error connecting to Deepgram (attempt {retry_count+1}/{max_retries}): {e}")
                 self.connected = False
@@ -131,13 +156,13 @@ class DeepgramService:
         Returns:
             bool: True if audio was sent successfully, False if connection is closed
         """
-        if not self.websocket:
-            logger.warning("Not connected to Deepgram, cannot send audio")
-            self.connected = False
+        if not await self.ensure_alive(): # Added ensure_alive call
+            logger.warning("Deepgram connection not alive (checked by ensure_alive), cannot send audio.")
             return False
-        
-        if not self.connected:
-            logger.warning("Deepgram connection is closed, cannot send audio")
+
+        # self.connected should be True here if ensure_alive succeeded
+        if not self.connected: # Double check
+            logger.warning("Deepgram connection is closed after ensure_alive check, cannot send audio")
             return False
         
         try:
@@ -152,16 +177,45 @@ class DeepgramService:
         except Exception as e:
             logger.error(f"Error sending audio to Deepgram: {e}")
             self.connected = False
-            raise
+            # raise # Don't re-raise, allow calling function to decide based on return value
+            return False # Explicitly return False on exception
     
-    async def send_json(self, data: Dict[str, Any]) -> None:
-        """Send JSON data to Deepgram"""
-        if not self.websocket:
-            raise ValueError("Not connected to Deepgram")
+    async def ensure_alive(self) -> bool:
+        """Checks the WebSocket connection and attempts to reconnect if necessary."""
+        if self.websocket and not self.websocket.closed:
+            # Optionally, could add a quick ping test here if just checking websocket.closed isn't enough
+            # For now, assume if it's not None and not closed, it's alive for sending.
+            # self.connected should accurately reflect the state from send/receive operations.
+            return self.connected # Rely on self.connected which is updated by send/receive
+
+        logger.info("Deepgram WebSocket closed or not initialized. Attempting to (re)connect...")
+        try:
+            await self.connect() # connect() has its own retry logic and sets self.connected
+            if self.connected:
+                logger.info("Successfully (re)connected to Deepgram via ensure_alive.")
+                # Any re-registration of handlers or re-sending of initial config
+                # would typically be managed by the class using this service (e.g., AudioHandler)
+                # or by making connect() idempotent regarding initial setup if called multiple times.
+                # For now, connect() re-sends config if it's an agent connection.
+            else:
+                logger.error("Failed to (re)connect to Deepgram via ensure_alive after connect() attempt.")
+            return self.connected
+        except Exception as e:
+            logger.error(f"Exception during ensure_alive -> connect(): {e}")
+            self.connected = False # Ensure state is accurate
+            return False
+
+    async def send_json(self, data: Dict[str, Any]) -> bool:
+        """Send JSON data to Deepgram. Returns True on success, False on failure."""
+        if not await self.ensure_alive():
+            logger.warning("Deepgram connection not alive (checked by ensure_alive), cannot send JSON.")
+            return False
         
-        if not self.connected:
-            logger.warning("Deepgram connection is closed, cannot send JSON")
-            return
+        # self.connected should be True here if ensure_alive succeeded and didn't reconnect,
+        # or if ensure_alive reconnected successfully.
+        if not self.connected: # Double check, ensure_alive might have failed to connect
+             logger.warning("Deepgram connection is closed after ensure_alive check, cannot send JSON")
+             return False
         
         try:
             # Check if this is a message to the Chinese voice model
@@ -183,12 +237,41 @@ class DeepgramService:
                     logger.info(f"Chinese message content: {message}")
             
             json_data = json.dumps(data)
+            logger.info(f"RAW JSON PAYLOAD SENT TO DEEPGRAM: {json_data}")
             await self.websocket.send(json_data)
             logger.info(f"Sent JSON data to Deepgram: {data.get('type', 'unknown type')}")
+            return True
+        except websockets.exceptions.ConnectionClosed as e:
+            logger.error(f"Deepgram connection closed while sending JSON: {e.code} - {e.reason}")
+            self.connected = False
+            return False
         except Exception as e:
             logger.error(f"Error sending JSON data to Deepgram: {e}")
             self.connected = False
-            raise
+            # raise # Avoid re-raising to allow caller to handle based on boolean
+            return False
+
+    async def send_raw_json_string(self, json_string: str) -> bool:
+        """Sends a pre-formatted JSON string to Deepgram. Returns True on success, False on failure."""
+        if not await self.ensure_alive():
+            logger.warning("Deepgram connection not alive (checked by ensure_alive), cannot send raw JSON string.")
+            return False
+        
+        if not self.connected:
+             logger.warning("Deepgram connection is closed after ensure_alive check, cannot send raw JSON string")
+             return False
+        try:
+            await self.websocket.send(json_string)
+            logger.info(f"Sent raw JSON string to Deepgram: {json_string[:100]}")
+            return True
+        except websockets.exceptions.ConnectionClosed as e:
+            logger.error(f"Deepgram connection closed while sending raw JSON string: {e.code} - {e.reason}")
+            self.connected = False
+            return False
+        except Exception as e:
+            logger.error(f"Error sending raw JSON string to Deepgram: {e}")
+            self.connected = False
+            return False
     
     async def send_ping(self) -> bool:
         """
@@ -212,10 +295,17 @@ class DeepgramService:
             return False
     
     async def receive_messages(self) -> None:
-        """Receive and process messages from Deepgram"""
-        if not self.websocket:
-            raise ValueError("Not connected to Deepgram")
-        
+        """Receive and process messages from Deepgram.
+        This loop will exit if the connection is closed or a critical error occurs.
+        The caller (AudioHandler) is responsible for attempting to reconnect and recall this method.
+        """
+        if not self.websocket or not self.connected: # Check self.connected as well
+            logger.error("Cannot receive messages: Not connected to Deepgram or websocket is None.")
+            # Set self.connected to False to signal the caller loop to attempt reconnection.
+            self.connected = False 
+            return # Exit, so AudioHandler's loop can try ensure_alive
+
+        logger.info("Starting to receive messages from Deepgram...")
         try:
             async for message in self.websocket:
                 if isinstance(message, str):
@@ -255,16 +345,27 @@ class DeepgramService:
                         await handler(message)
         except websockets.exceptions.ConnectionClosed as e:
             logger.error(f"Deepgram connection closed: {e}")
-            self.connected = False
+            self.connected = False # Connection is definitely closed if loop exits normally or due to this error
+            logger.error(f"Deepgram connection closed: {e}") # Log the specific close reason
         except asyncio.CancelledError:
-            logger.info("Receive messages task cancelled")
-            await self.close()
-            raise
+            logger.info("Deepgram receive_messages task cancelled.")
+            # self.connected should be managed by close() if called
+            # If not explicitly closed, it might still be considered connected until ensure_alive checks
+            await self.close() # Ensure cleanup on cancellation
+            raise # Re-raise CancelledError to stop the calling loop in AudioHandler
         except Exception as e:
-            logger.error(f"Error in receive_from_deepgram: {e}")
-            self.connected = False
+            logger.error(f"Error in receive_messages from Deepgram: {e}")
+            self.connected = False # Critical error, mark as not connected
+            # Do not raise here, let AudioHandler's loop decide to retry or stop.
+        finally:
+            logger.info("Exiting Deepgram receive_messages inner loop.")
+            # self.connected state should reflect the outcome of the loop.
+            # If loop exited due to ConnectionClosed, self.connected is already False.
+            # If loop exited due to other unhandled exception, self.connected is False.
+            # If loop was cancelled and close() was called, self.connected is False.
+
     
-    async def check_connection(self) -> bool:
+    async def check_connection(self) -> bool: # This method might be less used if ensure_alive is robust
         """
         Check if the Deepgram connection is still alive
         

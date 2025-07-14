@@ -1,0 +1,873 @@
+Test started at: 2025-06-10T20:36:08.375625
+Fetching all dishes for portal: 06850184
+Found 190 dishes. Starting to test each one...
+
+--- TESTING DISH (1/190): 有税商品 (ID: 26E4571B-EFEE-4BBE-AA2B-5821F3B7AD12) ---
+API Response for 有税商品: {"data": "A4C3D851-A2AD-47C3-A94F-670277D50BF8", "success": true, "message": ""}
+--> SUCCESS: Ordered 有税商品
+
+--- TESTING DISH (2/190): 免税商品 (ID: C71B2404-28F4-40E1-AC2A-5E98A452AD1C) ---
+API Response for 免税商品: {"data": "049B5A01-9553-41D5-997E-FA67488E7178", "success": true, "message": ""}
+--> SUCCESS: Ordered 免税商品
+
+--- TESTING DISH (3/190): 外卖时免税 (ID: 1967DE00-36D5-4A78-9012-ED14B3E5FFCE) ---
+API Response for 外卖时免税: {"data": "9BC1C87B-DB40-4A62-A19D-5706E81DEAF6", "success": true, "message": ""}
+--> SUCCESS: Ordered 外卖时免税
+
+--- TESTING DISH (4/190): 10积分兑换商品 (ID: 2A632576-A708-4FD8-9469-2E7482E76717) ---
+API Response for 10积分兑换商品: {"data": "7CD70558-678C-419F-B540-4635E4C782D0", "success": true, "message": ""}
+--> SUCCESS: Ordered 10积分兑换商品
+
+--- TESTING DISH (5/190): 奖励5积分商品 (ID: 065AEAD6-3E2A-4896-954E-9E1F8923F81E) ---
+API Response for 奖励5积分商品: {"data": "7297264E-02EE-45E5-8BE4-D7ADE54678AE", "success": true, "message": ""}
+--> SUCCESS: Ordered 奖励5积分商品
+
+--- TESTING DISH (6/190): 积分奖励菜品 (ID: 19A31131-7C51-4156-BD51-48796EDA556C) ---
+API Response for 积分奖励菜品: {"data": "93147C7E-0DD9-4AC9-BE68-C7805634B81D", "success": true, "message": ""}
+--> SUCCESS: Ordered 积分奖励菜品
+
+--- TESTING DISH (7/190): 蒜薹炒肉 (ID: 27E9FB3A-F9D3-4D6C-AE5E-E362167D0B86) ---
+API Response for 蒜薹炒肉: {"data": "F3BDB19F-0996-45F4-A61E-E8E59C904906", "success": true, "message": ""}
+--> SUCCESS: Ordered 蒜薹炒肉
+
+--- TESTING DISH (8/190): 桂花酒酿圆子 (ID: C931DDA1-515E-468E-8471-00FDDCAFDB13) ---
+API Response for 桂花酒酿圆子: {"data": "16365F78-DCF5-4E65-AA5C-B44FB9F3815D", "success": true, "message": ""}
+--> SUCCESS: Ordered 桂花酒酿圆子
+
+--- TESTING DISH (9/190): Passion Fruit Green Tea (ID: C025AD90-C9D9-4666-B7BF-99DBA4F4B43D) ---
+API Response for Passion Fruit Green Tea: {"data": "E60D3957-A065-4765-9EB2-8B5669E21235", "success": true, "message": ""}
+--> SUCCESS: Ordered Passion Fruit Green Tea
+
+--- TESTING DISH (10/190): Milk Creme Winter Melon (ID: 0452BA40-B269-4F50-8744-B29115A50836) ---
+API Response for Milk Creme Winter Melon: {"data": "4E6F0CFD-351E-4D92-9457-4A19E16FB1A1", "success": true, "message": ""}
+--> SUCCESS: Ordered Milk Creme Winter Melon
+
+--- TESTING DISH (11/190): Tiger Pearl Milk (ID: F7AA6F2D-6D63-404C-B47B-8DDA5494CB24) ---
+API Response for Tiger Pearl Milk: {"data": "9F566024-C0C6-48AA-89D6-01252CED5769", "success": true, "message": ""}
+--> SUCCESS: Ordered Tiger Pearl Milk
+
+--- TESTING DISH (12/190): Grass Jelly (ID: E953FA42-5E0E-4A62-A425-8C67BBFC294F) ---
+API Response for Grass Jelly: {"data": "58DC7AE2-A978-4365-9A49-732F9A2D0B6A", "success": true, "message": ""}
+--> SUCCESS: Ordered Grass Jelly
+
+--- TESTING DISH (13/190): Panda Milk Tea (W. Boba) (ID: BFCE2B32-F908-4A6D-AFB7-0A430B407E37) ---
+API Response for Panda Milk Tea (W. Boba): {"data": "E7E509CA-B5D8-42F6-B73E-562889D829A1", "success": true, "message": ""}
+--> SUCCESS: Ordered Panda Milk Tea (W. Boba)
+
+--- TESTING DISH (14/190): Boba (ID: 8ED9DD4B-CCDF-48A6-842A-935E5D53FAFC) ---
+API Response for Boba: {"data": "5E185B71-A342-4153-8620-51104B9D847D", "success": true, "message": ""}
+--> SUCCESS: Ordered Boba
+
+--- TESTING DISH (15/190): Crystal Boba (ID: DF5A7F61-4605-4D2D-9DF5-15B571CDACBE) ---
+API Response for Crystal Boba: {"data": "AB0B0609-144E-45F7-BABE-BF6CFE9A0B9C", "success": true, "message": ""}
+--> SUCCESS: Ordered Crystal Boba
+
+--- TESTING DISH (16/190): Lychee Jelly (ID: B55AE367-6585-46D4-B945-272D63D28991) ---
+API Response for Lychee Jelly: {"data": "BE6E9CB9-537A-47C0-B0C8-5546D8355F33", "success": true, "message": ""}
+--> SUCCESS: Ordered Lychee Jelly
+
+--- TESTING DISH (17/190): Pudding (ID: 27AFBDF8-F975-4DD5-AAF3-9D5B61B23E5D) ---
+API Response for Pudding: {"data": "06FEA231-B87B-484D-AF15-667B5BA198FA", "success": true, "message": ""}
+--> SUCCESS: Ordered Pudding
+
+--- TESTING DISH (18/190): Hokkaido Milk Tea(With Boba) (TG) (ID: 9667D65D-50C7-4E2F-9647-25B5CE59AAAD) ---
+API Response for Hokkaido Milk Tea(With Boba) (TG): {"data": "E96F193B-D56E-486C-AEDC-8E84B0D2FC29", "success": true, "message": ""}
+--> SUCCESS: Ordered Hokkaido Milk Tea(With Boba) (TG)
+
+--- TESTING DISH (19/190): Taro Milk Tea(TG) (ID: F269AEBB-362E-4D87-8FDC-3DCD91EA6580) ---
+API Response for Taro Milk Tea(TG): {"data": "6EA3BB29-95C8-4525-8BF2-E476C1AA4DF9", "success": true, "message": ""}
+--> SUCCESS: Ordered Taro Milk Tea(TG)
+
+--- TESTING DISH (20/190): Grass Jelly (TG) (ID: CBBE5DC2-4DFE-40B0-8B18-1D36B91F083D) ---
+API Response for Grass Jelly (TG): {"data": "C6899DD3-0ED1-49F6-AF87-49B0F3E4E1CC", "success": true, "message": ""}
+--> SUCCESS: Ordered Grass Jelly (TG)
+
+--- TESTING DISH (21/190): Lychee Jelly (TG) (ID: D225549B-7522-4275-B37D-B21368A91305) ---
+API Response for Lychee Jelly (TG): {"data": "99B0000F-E300-4C40-9CFD-7EC9D800616D", "success": true, "message": ""}
+--> SUCCESS: Ordered Lychee Jelly (TG)
+
+--- TESTING DISH (22/190): Boba (TG) (ID: CA5C9488-1297-471D-9D01-67069E456FBC) ---
+API Response for Boba (TG): {"data": "54947B74-4F7A-482A-B99F-BA367491D815", "success": true, "message": ""}
+--> SUCCESS: Ordered Boba (TG)
+
+--- TESTING DISH (23/190): Pudding (TG) (ID: F962A4D6-A797-4BA7-AC55-AAC44B3B9C78) ---
+API Response for Pudding (TG): {"data": "C908854A-F6D7-4B41-9D00-E05408D1C7F3", "success": true, "message": ""}
+--> SUCCESS: Ordered Pudding (TG)
+
+--- TESTING DISH (24/190): Crystal Boba (TG) (ID: C498F751-D3CF-4C28-BEF1-7A4B01BC1AEA) ---
+API Response for Crystal Boba (TG): {"data": "797DDC63-9C1D-421D-9BD4-0024F06E8866", "success": true, "message": ""}
+--> SUCCESS: Ordered Crystal Boba (TG)
+
+--- TESTING DISH (25/190): F4. Creme Brulee Thai Tea (ID: 52AC584F-7A12-45BE-986F-0D57A50671DE) ---
+API Response for F4. Creme Brulee Thai Tea: {"data": "C078CF83-CC05-45D1-B070-6CEDEB467FB2", "success": true, "message": ""}
+--> SUCCESS: Ordered F4. Creme Brulee Thai Tea
+
+--- TESTING DISH (26/190): 经典珍珠乌龙奶茶 (ID: 0A951DA0-2DE5-44CB-9EED-B9887054E6A9) ---
+API Response for 经典珍珠乌龙奶茶: {"data": "03DBE959-6B2A-450C-BA75-B56043B380AA", "success": true, "message": ""}
+--> SUCCESS: Ordered 经典珍珠乌龙奶茶
+
+--- TESTING DISH (27/190): 血糯米霸奶茶 (ID: 8ED95997-288F-4B40-832D-D5109E5BA599) ---
+API Response for 血糯米霸奶茶: {"data": "8CB4478B-A06B-402A-B9A4-FD31676A450B", "success": true, "message": ""}
+--> SUCCESS: Ordered 血糯米霸奶茶
+
+--- TESTING DISH (28/190): Yuzu Green Tea (ID: E5CB035F-A5E8-4286-9832-63FBB84F3638) ---
+API Response for Yuzu Green Tea: {"data": "1E363353-C2EB-4831-AD1F-95D65A2CA09F", "success": true, "message": ""}
+--> SUCCESS: Ordered Yuzu Green Tea
+
+--- TESTING DISH (29/190): 桃之夭夭2 (ID: D0291007-2BC5-4F2A-A89E-CA3201662A29) ---
+API Response for 桃之夭夭2: {"data": "A4407B8F-B69D-4D3D-96D4-FA3334693EF4", "success": true, "message": ""}
+--> SUCCESS: Ordered 桃之夭夭2
+
+--- TESTING DISH (30/190): 仙草冻 (ID: D2F2326F-818C-4181-9423-F2CACBB9F8C4) ---
+API Response for 仙草冻: {"data": "BCD3E0C3-E01F-4412-A4A6-9C332BD9BAE4", "success": true, "message": ""}
+--> SUCCESS: Ordered 仙草冻
+
+--- TESTING DISH (31/190): Black Sugar Dirty Milk Tea (ID: CD8FCB51-A507-498B-81BA-D48E450CD84A) ---
+API Response for Black Sugar Dirty Milk Tea: {"data": "94900E9E-48FD-4E72-9D15-6C3351B93740", "success": true, "message": ""}
+--> SUCCESS: Ordered Black Sugar Dirty Milk Tea
+
+--- TESTING DISH (32/190): Peach Oolong Tea (ID: CEBC3D7D-A5F4-4E05-B208-46A870A729D0) ---
+API Response for Peach Oolong Tea: {"data": "F25F8E95-AE7B-4587-9EE0-8DA4D4289A79", "success": true, "message": ""}
+--> SUCCESS: Ordered Peach Oolong Tea
+
+--- TESTING DISH (33/190): 冰镇银耳烤雪梨 (ID: 01D1EF16-A370-4451-A698-4496992FF335) ---
+API Response for 冰镇银耳烤雪梨: {"data": "F6828AD5-80BC-462F-B0EE-BEDA9716C5DE", "success": true, "message": ""}
+--> SUCCESS: Ordered 冰镇银耳烤雪梨
+
+--- TESTING DISH (34/190): 山野栀子 (ID: 95C1EC5D-C5FE-450F-A612-393365F13107) ---
+API Response for 山野栀子: {"data": "CA794E69-78EF-43D3-9C97-157C13EE72F2", "success": true, "message": ""}
+--> SUCCESS: Ordered 山野栀子
+
+--- TESTING DISH (35/190): 秘制羊肉锅仔（生产时间测试） (ID: 4000F08A-D79F-47F1-A0EF-EC90A902A9F0) ---
+API Response for 秘制羊肉锅仔（生产时间测试）: {"data": null, "success": false, "message": "{\r\n  \"text\": \"PrepareTimeNotEnough\",\r\n  \"args\": [\r\n    null,\r\n    \"30\"\r\n  ]\r\n}"}
+--> FAILED: 秘制羊肉锅仔（生产时间测试） - {
+  "text": "PrepareTimeNotEnough",
+  "args": [
+    null,
+    "30"
+  ]
+}
+
+--- TESTING DISH (36/190): 萝卜牛腩煲 (ID: 3E0DFCEC-C4A6-4723-B8D5-D3AED71F5287) ---
+API Response for 萝卜牛腩煲: {"data": "7ACB02A4-A1D6-4E49-B1D7-1D94A64FA4A4", "success": true, "message": ""}
+--> SUCCESS: Ordered 萝卜牛腩煲
+
+--- TESTING DISH (37/190): 铁板牛肉（起订数量测试） (ID: 5E5B012F-6726-4571-A6B4-CAA2ADAE83A7) ---
+API Response for 铁板牛肉（起订数量测试）: {"data": "B6DE1687-CC01-4497-867F-1AD86D75FE48", "success": true, "message": ""}
+--> SUCCESS: Ordered 铁板牛肉（起订数量测试）
+
+--- TESTING DISH (38/190): 焗肉醬意粉 (ID: FB976FCE-F1F0-4C56-9507-1F4F7C8F9EBF) ---
+API Response for 焗肉醬意粉: {"data": "02691E44-E282-4FEA-82E5-1AF4DE9B8EEB", "success": true, "message": ""}
+--> SUCCESS: Ordered 焗肉醬意粉
+
+--- TESTING DISH (39/190): 荠菜小馄饨(0) (ID: FEAE9FED-D3B1-4695-99D9-0263A8092316) ---
+API Response for 荠菜小馄饨(0): {"data": "DA88E6AD-6E32-4E2E-9CC4-8187230F757D", "success": true, "message": ""}
+--> SUCCESS: Ordered 荠菜小馄饨(0)
+
+--- TESTING DISH (40/190): 锅贴（8只） (ID: F7F958ED-E71E-4C42-AA5D-57C9C149AB81) ---
+API Response for 锅贴（8只）: {"data": null, "success": false, "message": "{\r\n  \"text\": \"ProductNotAvailable\",\r\n  \"args\": [\r\n    null\r\n  ]\r\n}"}
+--> FAILED: 锅贴（8只） - {
+  "text": "ProductNotAvailable",
+  "args": [
+    null
+  ]
+}
+
+--- TESTING DISH (41/190): 上海炒年糕/汤年糕(免D) (ID: FCBA9ACE-ADFA-4796-A809-936D418F1B1A) ---
+API Response for 上海炒年糕/汤年糕(免D): {"data": "951284D6-8711-4D6A-8C10-F2A93C70628E", "success": true, "message": ""}
+--> SUCCESS: Ordered 上海炒年糕/汤年糕(免D)
+
+--- TESTING DISH (42/190): Bacon Bread/ct (ID: 9DB7A501-11F0-4C9B-B4BD-CEC1C6BA5B38) ---
+API Response for Bacon Bread/ct: {"data": "9A11D22A-01CE-457E-9867-26FF3D0AB2EC", "success": true, "message": ""}
+--> SUCCESS: Ordered Bacon Bread/ct
+
+--- TESTING DISH (43/190): 月饼 (ID: CD2D405A-5774-4D01-B724-2A793D7F602E) ---
+API Response for 月饼: {"data": "37C4E01D-112C-4A5A-AA03-952DE3E46B75", "success": true, "message": ""}
+--> SUCCESS: Ordered 月饼
+
+--- TESTING DISH (44/190): 杨州煮干丝 (ID: AE6F2D6C-3BD5-4377-AD74-01DFED456C23) ---
+API Response for 杨州煮干丝: {"data": "A6D45856-465C-497C-BE7A-2E7F55EC3E6E", "success": true, "message": ""}
+--> SUCCESS: Ordered 杨州煮干丝
+
+--- TESTING DISH (45/190): 鱼香肉丝 (ID: C80B1BFE-4CF5-4C5B-A4C7-0EB28ACAB04A) ---
+API Response for 鱼香肉丝: {"data": "5D7148D8-3A53-4206-9F11-5187D54DED12", "success": true, "message": ""}
+--> SUCCESS: Ordered 鱼香肉丝
+
+--- TESTING DISH (46/190): 鱼香茄子 (ID: EAEEDB43-9F1A-4AD1-91FF-E230E10A0259) ---
+API Response for 鱼香茄子: {"data": "A0137FC3-DCDF-40AF-9FA9-F9803B8AA7C9", "success": true, "message": ""}
+--> SUCCESS: Ordered 鱼香茄子
+
+--- TESTING DISH (47/190): 梅干菜扣肉 (ID: BF671227-5E24-4353-BEE8-50F4265F3A94) ---
+API Response for 梅干菜扣肉: {"data": "210A6AA4-89D4-40A7-B0EE-A87992958D69", "success": true, "message": ""}
+--> SUCCESS: Ordered 梅干菜扣肉
+
+--- TESTING DISH (48/190): 椒盐排骨 (ID: C01053DD-B6F5-483A-843D-87506BD9DF9B) ---
+API Response for 椒盐排骨: {"data": "85C1F3EA-492E-462D-9C97-0EA01F13E415", "success": true, "message": ""}
+--> SUCCESS: Ordered 椒盐排骨
+
+--- TESTING DISH (49/190): 葱爆牛肉 (ID: C5BA0FD6-0A4F-42C1-9140-01D1765C4EF8) ---
+API Response for 葱爆牛肉: {"data": "BEF242DE-A6AC-4F6D-B3B4-1437C6CC5B25", "success": true, "message": ""}
+--> SUCCESS: Ordered 葱爆牛肉
+
+--- TESTING DISH (50/190): 蟹粉狮子头 (ID: AB98EF66-09D5-4A44-AF3D-90D2710D04BF) ---
+API Response for 蟹粉狮子头: {"data": "2DD336E5-CA10-4756-A7A2-115582EA8BA2", "success": true, "message": ""}
+--> SUCCESS: Ordered 蟹粉狮子头
+
+--- TESTING DISH (51/190): 称重菜品改变测试 (ID: 39666D9B-53D0-4046-B775-1AE30F83D999) ---
+API Response for 称重菜品改变测试: {"data": "99C5294B-F4A2-4ACD-83DF-F837DC8FD8FB", "success": true, "message": ""}
+--> SUCCESS: Ordered 称重菜品改变测试
+
+--- TESTING DISH (52/190): 剁椒活鱼 (ID: 945D0903-B07B-48A5-B13F-E6F3FDFB6738) ---
+API Response for 剁椒活鱼: {"data": "150D7122-D917-43C4-8BE9-1719F457AE04", "success": true, "message": ""}
+--> SUCCESS: Ordered 剁椒活鱼
+
+--- TESTING DISH (53/190): 干锅美极虾 (ID: CB0A0193-97D3-4840-AE6C-BAE941C1CB3B) ---
+API Response for 干锅美极虾: {"data": "5E4C6584-2BD4-433B-94B2-94C6656CBA9D", "success": true, "message": ""}
+--> SUCCESS: Ordered 干锅美极虾
+
+--- TESTING DISH (54/190): 干锅茶树菇 (ID: 0DCFF28E-C223-4A61-8235-F80CACC313A6) ---
+API Response for 干锅茶树菇: {"data": null, "success": false, "message": "{\r\n  \"text\": \"PrepareTimeNotEnough\",\r\n  \"args\": [\r\n    null,\r\n    \"5\"\r\n  ]\r\n}"}
+--> FAILED: 干锅茶树菇 - {
+  "text": "PrepareTimeNotEnough",
+  "args": [
+    null,
+    "5"
+  ]
+}
+
+--- TESTING DISH (55/190): 水煮鱼片 (ID: CA18BA58-D6D3-42D6-B119-504C9784EBC7) ---
+API Response for 水煮鱼片: {"data": "4161CD7C-851D-4ABB-A05F-6A123E07A7CF", "success": true, "message": ""}
+--> SUCCESS: Ordered 水煮鱼片
+
+--- TESTING DISH (56/190): 湖南爆肥肠 (ID: A1DB7ACE-A191-4834-8404-8E4C13733D67) ---
+API Response for 湖南爆肥肠: {"data": null, "success": false, "message": "{\r\n  \"text\": \"PrepareTimeNotEnough\",\r\n  \"args\": [\r\n    null,\r\n    \"5\"\r\n  ]\r\n}"}
+--> FAILED: 湖南爆肥肠 - {
+  "text": "PrepareTimeNotEnough",
+  "args": [
+    null,
+    "5"
+  ]
+}
+
+--- TESTING DISH (57/190): 重庆辣子鸡 (ID: 6BF7758E-A4A3-433E-AFBB-2D510F642C97) ---
+API Response for 重庆辣子鸡: {"data": null, "success": false, "message": "{\r\n  \"text\": \"PrepareTimeNotEnough\",\r\n  \"args\": [\r\n    null,\r\n    \"10\"\r\n  ]\r\n}"}
+--> FAILED: 重庆辣子鸡 - {
+  "text": "PrepareTimeNotEnough",
+  "args": [
+    null,
+    "10"
+  ]
+}
+
+--- TESTING DISH (58/190): 鱼香肉丝拌饭/面/米粉 (ID: A913F9AA-89BA-42CF-A357-EEC13E6AA145) ---
+API Response for 鱼香肉丝拌饭/面/米粉: {"data": "7872B5B6-9B87-46FF-9C58-4A595324AB55", "success": true, "message": ""}
+--> SUCCESS: Ordered 鱼香肉丝拌饭/面/米粉
+
+--- TESTING DISH (59/190): 上海小笼包（8只） (ID: 8D0E7CA6-576C-4767-A89D-3E44C31C2D12) ---
+API Response for 上海小笼包（8只）: {"data": "CBC158A0-EB97-43C4-9E13-2A1854B7AA9E", "success": true, "message": ""}
+--> SUCCESS: Ordered 上海小笼包（8只）
+
+--- TESTING DISH (60/190): 上海炒年糕/汤年糕 (ID: 155F9792-58D3-411A-8AEB-1642F67BF6D8) ---
+API Response for 上海炒年糕/汤年糕: {"data": "CDE4284D-89CD-49A1-9A47-09B952B39645", "success": true, "message": ""}
+--> SUCCESS: Ordered 上海炒年糕/汤年糕
+
+--- TESTING DISH (61/190): 上海粗炒面 (ID: CEA19DDD-805D-4FAC-A125-C7A13A6475BC) ---
+API Response for 上海粗炒面: {"data": "2EBE1655-CD54-4A16-BB91-4C01096C3BB2", "success": true, "message": ""}
+--> SUCCESS: Ordered 上海粗炒面
+
+--- TESTING DISH (62/190): 上海葱油饼 (ID: EA0D92CF-8404-4DDA-AE72-76178A12EC1E) ---
+API Response for 上海葱油饼: {"data": "8702E1F5-E764-4E3E-BA41-E493C9865A17", "success": true, "message": ""}
+--> SUCCESS: Ordered 上海葱油饼
+
+--- TESTING DISH (63/190): 南瓜饼（4只） (ID: A87E73F1-DFF4-49EF-8FE8-532666366DFA) ---
+API Response for 南瓜饼（4只）: {"data": "994146E1-7617-4B75-8D5F-57D36E764E04", "success": true, "message": ""}
+--> SUCCESS: Ordered 南瓜饼（4只）
+
+--- TESTING DISH (64/190): 桂花酒酿圆子 (ID: C931DDA1-515E-468E-8471-00FDDCAFDB13) ---
+API Response for 桂花酒酿圆子: {"data": "FB6944C6-53CB-4776-98E2-3C16ABA6F62D", "success": true, "message": ""}
+--> SUCCESS: Ordered 桂花酒酿圆子
+
+--- TESTING DISH (65/190): 荠菜小馄饨 (ID: B3715636-0555-4A85-8F5C-9FDAE1884D28) ---
+API Response for 荠菜小馄饨: {"data": "287766C7-7959-4B96-B34E-E16B233CC5D1", "success": true, "message": ""}
+--> SUCCESS: Ordered 荠菜小馄饨
+
+--- TESTING DISH (66/190): 锅贴（8只） (ID: F7F958ED-E71E-4C42-AA5D-57C9C149AB81) ---
+API Response for 锅贴（8只）: {"data": null, "success": false, "message": "{\r\n  \"text\": \"ProductNotAvailable\",\r\n  \"args\": [\r\n    null\r\n  ]\r\n}"}
+--> FAILED: 锅贴（8只） - {
+  "text": "ProductNotAvailable",
+  "args": [
+    null
+  ]
+}
+
+--- TESTING DISH (67/190): 香菇蒸菜包（5只） (ID: 379F24CC-3D17-480E-A6EE-BEC8C450EDE5) ---
+API Response for 香菇蒸菜包（5只）: {"data": "470182D0-E1C9-4CAC-B9AA-86B479D6FC69", "success": true, "message": ""}
+--> SUCCESS: Ordered 香菇蒸菜包（5只）
+
+--- TESTING DISH (68/190): 招牌红烧牛肉面 (ID: C6D7EF6E-FA46-42FD-88AE-EBB4CB568AE3) ---
+API Response for 招牌红烧牛肉面: {"data": "05F8900E-BA0E-49D1-961A-26767D79D652", "success": true, "message": ""}
+--> SUCCESS: Ordered 招牌红烧牛肉面
+
+--- TESTING DISH (69/190): 鱼香肉丝拌饭/面/米粉 (ID: A913F9AA-89BA-42CF-A357-EEC13E6AA145) ---
+API Response for 鱼香肉丝拌饭/面/米粉: {"data": "9CF9E385-5C11-4E3B-888D-110FCD42950A", "success": true, "message": ""}
+--> SUCCESS: Ordered 鱼香肉丝拌饭/面/米粉
+
+--- TESTING DISH (70/190): 红烧肉拌面/饭/米粉 (ID: A9C24937-FE30-4A18-8C6A-1324F2C9DCFF) ---
+API Response for 红烧肉拌面/饭/米粉: {"data": "A1A46ACF-B76C-473D-B6D4-14485790E49F", "success": true, "message": ""}
+--> SUCCESS: Ordered 红烧肉拌面/饭/米粉
+
+--- TESTING DISH (71/190): 五花肉汤面 (ID: 49303C76-91D0-4599-9D42-97D9E05ADE81) ---
+API Response for 五花肉汤面: {"data": "42B1E7B3-A0BF-481F-89A4-F4C7DFCABE47", "success": true, "message": ""}
+--> SUCCESS: Ordered 五花肉汤面
+
+--- TESTING DISH (72/190): 大辣红汤牛肉面 (ID: 8A8DD10E-B731-475D-A87E-6E9AB6C84F73) ---
+API Response for 大辣红汤牛肉面: {"data": "EB5A1622-F09D-4051-9DC4-8F579FA4E7F8", "success": true, "message": ""}
+--> SUCCESS: Ordered 大辣红汤牛肉面
+
+--- TESTING DISH (73/190): 麻辣小龙虾尾拌面 (ID: 8D5163AE-3220-4D82-A509-13B83AA88354) ---
+API Response for 麻辣小龙虾尾拌面: {"data": "F7ED36FC-1045-41E7-9D79-610FF577E7A5", "success": true, "message": ""}
+--> SUCCESS: Ordered 麻辣小龙虾尾拌面
+
+--- TESTING DISH (74/190): 湖南小炒猪肉拌面/饭/米粉 (ID: AE2DEB93-42EF-4165-BFE7-994E5230D436) ---
+API Response for 湖南小炒猪肉拌面/饭/米粉: {"data": "9E922E72-59CE-4D28-B822-F619B16478A0", "success": true, "message": ""}
+--> SUCCESS: Ordered 湖南小炒猪肉拌面/饭/米粉
+
+--- TESTING DISH (75/190): 愚式川香牛骨面 (T) (ID: 58351FD9-92B8-481E-9A81-BCE3232577CB) ---
+API Response for 愚式川香牛骨面 (T): {"data": "45D40340-B6DF-43DA-8BB9-BF1D96CB146B", "success": true, "message": ""}
+--> SUCCESS: Ordered 愚式川香牛骨面 (T)
+
+--- TESTING DISH (76/190): 上海鸡毛菜 (ID: 7A122BA7-FDC7-4481-AE97-970E8ED32C2B) ---
+API Response for 上海鸡毛菜: {"data": "80A9A7A9-526F-40AE-993D-FF826EB3AD54", "success": true, "message": ""}
+--> SUCCESS: Ordered 上海鸡毛菜
+
+--- TESTING DISH (77/190): 南瓜山药 (ID: EE8296F9-698F-440D-A95B-09F822AEC9E2) ---
+API Response for 南瓜山药: {"data": "B10C9D07-D960-491F-BC06-E23021463E0A", "success": true, "message": ""}
+--> SUCCESS: Ordered 南瓜山药
+
+--- TESTING DISH (78/190): 地三鲜 (ID: AFFEA6EC-02DA-4726-BDA3-BF52E04759EE) ---
+API Response for 地三鲜: {"data": "5F26E103-A576-49D0-BABD-D1761B2E3767", "success": true, "message": ""}
+--> SUCCESS: Ordered 地三鲜
+
+--- TESTING DISH (79/190): 荷塘小炒 (ID: CEA26A4C-1375-45C3-A404-09F3ABD1ED45) ---
+API Response for 荷塘小炒: {"data": "B3A1E4D7-BB66-41D4-B8F4-AE2E2BCDCDDC", "success": true, "message": ""}
+--> SUCCESS: Ordered 荷塘小炒
+
+--- TESTING DISH (80/190): 蒜茸大豆苗 (ID: 253F5BB8-06B6-44FB-BB85-210CF646E397) ---
+API Response for 蒜茸大豆苗: {"data": "FD0DB3BD-241C-44D2-9D01-C5B5770857D3", "success": true, "message": ""}
+--> SUCCESS: Ordered 蒜茸大豆苗
+
+--- TESTING DISH (81/190): 青椒土豆丝 (ID: F7AC15C7-C9B7-49B8-BFC5-03C8C59F840C) ---
+API Response for 青椒土豆丝: {"data": "CE5379F8-22E5-43AA-A431-DC97105A1ABF", "success": true, "message": ""}
+--> SUCCESS: Ordered 青椒土豆丝
+
+--- TESTING DISH (82/190): 罗汉素鸭 (ID: 740132C8-22A1-42EA-BB73-5BC1B9A4841B) ---
+API Response for 罗汉素鸭: {"data": "A0616825-06A3-438A-8A34-CC045F5FF75D", "success": true, "message": ""}
+--> SUCCESS: Ordered 罗汉素鸭
+
+--- TESTING DISH (83/190): 南京盐水鸭 (ID: C37ACFBF-7F1E-4C1A-92EF-EF979830B58D) ---
+API Response for 南京盐水鸭: {"data": null, "success": false, "message": "{\r\n  \"text\": \"ProductNotAvailable\",\r\n  \"args\": [\r\n    null\r\n  ]\r\n}"}
+--> FAILED: 南京盐水鸭 - {
+  "text": "ProductNotAvailable",
+  "args": [
+    null
+  ]
+}
+
+--- TESTING DISH (84/190): 夫妻肺片 (ID: 35B63254-6DF1-4DB8-A879-490DC6777893) ---
+API Response for 夫妻肺片: {"data": "3B86AACC-3AE9-43D1-8401-13DA38F0E7D2", "success": true, "message": ""}
+--> SUCCESS: Ordered 夫妻肺片
+
+--- TESTING DISH (85/190): 本帮醉鸡 (ID: AD650772-A2AE-4A29-BD81-D6F29B1657AC) ---
+API Response for 本帮醉鸡: {"data": null, "success": false, "message": "{\r\n  \"text\": \"PrepareTimeNotEnough\",\r\n  \"args\": [\r\n    null,\r\n    \"10\"\r\n  ]\r\n}"}
+--> FAILED: 本帮醉鸡 - {
+  "text": "PrepareTimeNotEnough",
+  "args": [
+    null,
+    "10"
+  ]
+}
+
+--- TESTING DISH (86/190): 上海熏鱼 (ID: 857F632C-76BA-4A06-A904-9912B6F47684) ---
+API Response for 上海熏鱼: {"data": "6C6EB63A-C780-496E-85CA-AFECE91ED804", "success": true, "message": ""}
+--> SUCCESS: Ordered 上海熏鱼
+
+--- TESTING DISH (87/190): 马兰头香干 (ID: EFC59724-7C6A-4AB9-AC9C-5DB2327BC035) ---
+API Response for 马兰头香干: {"data": "A0C6B69A-67CD-41B5-9DE2-A37804841047", "success": true, "message": ""}
+--> SUCCESS: Ordered 马兰头香干
+
+--- TESTING DISH (88/190): 上海咸肉菜饭 (ID: E70EE197-ADED-4CC1-991C-72B45B1C24B7) ---
+API Response for 上海咸肉菜饭: {"data": "FC5B3948-414E-4920-99B1-474F039A7971", "success": true, "message": ""}
+--> SUCCESS: Ordered 上海咸肉菜饭
+
+--- TESTING DISH (89/190): 油焖茭白 (ID: 0CA06007-3996-4A13-91DB-28F5CCF26000) ---
+API Response for 油焖茭白: {"data": "BB1562F8-7DF2-4BCC-83C6-3663B2486B6B", "success": true, "message": ""}
+--> SUCCESS: Ordered 油焖茭白
+
+--- TESTING DISH (90/190): 海鲜火锅 (ID: CEDD68A9-DF9C-467B-910E-2E7E52F4F7FF) ---
+API Response for 海鲜火锅: {"data": "F9AEEE45-AD4A-4A11-AA7C-AB3C53C5DEA6", "success": true, "message": ""}
+--> SUCCESS: Ordered 海鲜火锅
+
+--- TESTING DISH (91/190): 焗肉醬意粉 (ID: FB976FCE-F1F0-4C56-9507-1F4F7C8F9EBF) ---
+API Response for 焗肉醬意粉: {"data": "33D5F209-76B5-422F-A972-D9DC0D99DC78", "success": true, "message": ""}
+--> SUCCESS: Ordered 焗肉醬意粉
+
+--- TESTING DISH (92/190): 白饭 (ID: 9E407441-B867-4ED8-9C64-A1F582752B2C) ---
+API Response for 白饭: {"data": "03F54FD7-C22B-43B1-80C4-C2DF3CFEBF7F", "success": true, "message": ""}
+--> SUCCESS: Ordered 白饭
+
+--- TESTING DISH (93/190): 上海熏鱼(免T) (ID: F6C58DF1-37A0-4F2D-88F7-8C0B84ACB993) ---
+API Response for 上海熏鱼(免T): {"data": "2E51938A-85F7-406C-87BC-24E04E8D0014", "success": true, "message": ""}
+--> SUCCESS: Ordered 上海熏鱼(免T)
+
+--- TESTING DISH (94/190): 云南香茅草烤鱼 (ID: 5E5053DC-0789-40B4-A32E-87BAFC55A04F) ---
+API Response for 云南香茅草烤鱼: {"data": "1AF5D41F-C1C3-419F-9F11-C5E8FA73D56A", "success": true, "message": ""}
+--> SUCCESS: Ordered 云南香茅草烤鱼
+
+--- TESTING DISH (95/190): 羊肉串套餐 (ID: B0C6B174-A924-48DE-9A35-95C82841A005) ---
+API Response for 羊肉串套餐: {"data": "39681637-C3E9-4726-8961-E13C61989EEB", "success": true, "message": ""}
+--> SUCCESS: Ordered 羊肉串套餐
+
+--- TESTING DISH (96/190): 羊肉串 (ID: A799D44B-0ED1-473F-8730-83AD992F9FA2) ---
+API Response for 羊肉串: {"data": "3A1878F9-FCE5-4324-8475-93C0152EC88B", "success": true, "message": ""}
+--> SUCCESS: Ordered 羊肉串
+
+--- TESTING DISH (97/190): 肯定没有 (ID: FEA45795-A1DF-455A-92BE-CAFA3B0026B3) ---
+API Response for 肯定没有: {"data": "6C70DCC7-AD61-4D19-8128-1F9DF7812622", "success": true, "message": ""}
+--> SUCCESS: Ordered 肯定没有
+
+--- TESTING DISH (98/190): 虾吃虾涮时尚锅套餐 (ID: BBE738B0-B6DD-4042-9FC6-77476FE8820A) ---
+API Response for 虾吃虾涮时尚锅套餐: {"data": "7F54F725-3AD5-4B4A-A444-39592FE23A5E", "success": true, "message": ""}
+--> SUCCESS: Ordered 虾吃虾涮时尚锅套餐
+
+--- TESTING DISH (99/190): Wagyu Feast(suitable 3Persons) (ID: 80B72B07-1CDB-4F7B-AE4D-959858CE238E) ---
+API Response for Wagyu Feast(suitable 3Persons): {"data": "140B8496-8438-4BB7-8EE2-39347C8317A1", "success": true, "message": ""}
+--> SUCCESS: Ordered Wagyu Feast(suitable 3Persons)
+
+--- TESTING DISH (100/190): Steamed Rice (ID: DC01C760-BC62-4F5E-BB0A-42634AC62FAE) ---
+API Response for Steamed Rice: {"data": "BCB04487-D38F-4124-A082-EF02BA36E3F8", "success": true, "message": ""}
+--> SUCCESS: Ordered Steamed Rice
+
+--- TESTING DISH (101/190): 04黄金万两黑面 (ID: 2180CDDE-A25A-4FA2-8D35-2DFDD20ECFCB) ---
+API Response for 04黄金万两黑面: {"data": "D637AD10-0FDF-4A6A-AD2B-4038FDE193BB", "success": true, "message": ""}
+--> SUCCESS: Ordered 04黄金万两黑面
+
+--- TESTING DISH (102/190): 蟹粉狮子头(XT) (ID: 818560CF-A1D5-476A-9590-0A188DD48EE9) ---
+API Response for 蟹粉狮子头(XT): {"data": "D6F9193D-F22E-4006-8B80-4ED41298A221", "success": true, "message": ""}
+--> SUCCESS: Ordered 蟹粉狮子头(XT)
+
+--- TESTING DISH (103/190): 海鲜火锅(XT) (ID: 3A416223-07DA-4D18-B93C-92306A88CC1F) ---
+API Response for 海鲜火锅(XT): {"data": "D459C90B-47B1-49D2-AC7B-627DD359522D", "success": true, "message": ""}
+--> SUCCESS: Ordered 海鲜火锅(XT)
+
+--- TESTING DISH (104/190): 南瓜山药(XT) (ID: F9BE91D8-A442-48A7-889F-6C7225E6698A) ---
+API Response for 南瓜山药(XT): {"data": "750E5263-22BC-435B-A7EF-66C518C6CCF8", "success": true, "message": ""}
+--> SUCCESS: Ordered 南瓜山药(XT)
+
+--- TESTING DISH (105/190): Milk Creme Winter Melon(XT) (ID: 2537B754-1FEC-44E4-80DB-3F88C5F8D670) ---
+API Response for Milk Creme Winter Melon(XT): {"data": "86CA001E-F535-4368-821A-D4AB326EC9BC", "success": true, "message": ""}
+--> SUCCESS: Ordered Milk Creme Winter Melon(XT)
+
+--- TESTING DISH (106/190): 地三鲜(XT) (ID: 426E4382-062A-4BD0-B391-9FADEB834B1E) ---
+API Response for 地三鲜(XT): {"data": "8C51F517-D582-466F-B9AE-DE57EEFC4CF7", "success": true, "message": ""}
+--> SUCCESS: Ordered 地三鲜(XT)
+
+--- TESTING DISH (107/190): 不参与任何活动菜品 (ID: 5E8295FD-E875-49B7-B2ED-E2B03A3D4C72) ---
+API Response for 不参与任何活动菜品: {"data": "8EA7C3C5-F125-4676-B134-033C797AE382", "success": true, "message": ""}
+--> SUCCESS: Ordered 不参与任何活动菜品
+
+--- TESTING DISH (108/190): 本帮醉鸡(免T) (ID: EE9BAD47-B82C-4ABE-AA88-608BA6772F25) ---
+API Response for 本帮醉鸡(免T): {"data": "3F316D06-6AF7-4FAA-A509-2A2938B0B7C7", "success": true, "message": ""}
+--> SUCCESS: Ordered 本帮醉鸡(免T)
+
+--- TESTING DISH (109/190): 上海熏鱼(免T) (ID: F6C58DF1-37A0-4F2D-88F7-8C0B84ACB993) ---
+API Response for 上海熏鱼(免T): {"data": "3D89A9EA-7FC0-4129-B12E-51421B873440", "success": true, "message": ""}
+--> SUCCESS: Ordered 上海熏鱼(免T)
+
+--- TESTING DISH (110/190): 南京盐水鸭(免T) (ID: 57828B2D-CDD9-48FF-AE42-DA283EB8A192) ---
+API Response for 南京盐水鸭(免T): {"data": "6035CD1D-D61F-493F-B812-A73AE179BC8D", "success": true, "message": ""}
+--> SUCCESS: Ordered 南京盐水鸭(免T)
+
+--- TESTING DISH (111/190): 夫妻肺片(免D) (ID: B8DFAED8-A368-4909-BF95-E82F197C48C0) ---
+API Response for 夫妻肺片(免D): {"data": "94CB79DA-6145-434A-BC4A-73069C8A8E21", "success": true, "message": ""}
+--> SUCCESS: Ordered 夫妻肺片(免D)
+
+--- TESTING DISH (112/190): 上海炒年糕/汤年糕(免D) (ID: FCBA9ACE-ADFA-4796-A809-936D418F1B1A) ---
+API Response for 上海炒年糕/汤年糕(免D): {"data": "9A7CF9AE-79BA-4B8F-A169-43ECDEB9FC48", "success": true, "message": ""}
+--> SUCCESS: Ordered 上海炒年糕/汤年糕(免D)
+
+--- TESTING DISH (113/190): 上海粗炒面(免D) (ID: 349015DF-D0B0-4A1E-BD5E-1CC12C6D71CF) ---
+API Response for 上海粗炒面(免D): {"data": "E1F4373A-7C1F-45B1-9CD6-1FC29A549432", "success": true, "message": ""}
+--> SUCCESS: Ordered 上海粗炒面(免D)
+
+--- TESTING DISH (114/190): 上海熏鱼(组F) (ID: BFC56ED4-9E84-4756-8DC5-E6C2F4DB2482) ---
+API Response for 上海熏鱼(组F): {"data": null, "success": false, "message": "{\r\n  \"text\": \"PrepareTimeNotEnough\",\r\n  \"args\": [\r\n    null,\r\n    \"15\"\r\n  ]\r\n}"}
+--> FAILED: 上海熏鱼(组F) - {
+  "text": "PrepareTimeNotEnough",
+  "args": [
+    null,
+    "15"
+  ]
+}
+
+--- TESTING DISH (115/190): 本帮醉鸡(组E) (ID: D933604E-3317-4471-98D8-2EC11267A671) ---
+API Response for 本帮醉鸡(组E): {"data": null, "success": false, "message": "{\r\n  \"text\": \"PrepareTimeNotEnough\",\r\n  \"args\": [\r\n    null,\r\n    \"15\"\r\n  ]\r\n}"}
+--> FAILED: 本帮醉鸡(组E) - {
+  "text": "PrepareTimeNotEnough",
+  "args": [
+    null,
+    "15"
+  ]
+}
+
+--- TESTING DISH (116/190): 夫妻肺片(0) (ID: EBEACAF5-C174-4277-BC69-2198519C62AE) ---
+API Response for 夫妻肺片(0): {"data": "F538CAE5-A416-4F77-BD58-312F55B40789", "success": true, "message": ""}
+--> SUCCESS: Ordered 夫妻肺片(0)
+
+--- TESTING DISH (117/190): 葱爆牛肉(0) (ID: 33BFAA13-AB8D-4CC7-ACDD-41454D113082) ---
+API Response for 葱爆牛肉(0): {"data": "590A2658-ADF6-42B8-B63E-EF01A44AB2FB", "success": true, "message": ""}
+--> SUCCESS: Ordered 葱爆牛肉(0)
+
+--- TESTING DISH (118/190): 荠菜小馄饨(0) (ID: FEAE9FED-D3B1-4695-99D9-0263A8092316) ---
+API Response for 荠菜小馄饨(0): {"data": "DCEFB526-B37A-42A9-AE91-3DC5C7C3C082", "success": true, "message": ""}
+--> SUCCESS: Ordered 荠菜小馄饨(0)
+
+--- TESTING DISH (119/190): 南京盐水鸭(校验D) (ID: 8B7F265B-D7E1-4F41-A52D-495D0171B101) ---
+API Response for 南京盐水鸭(校验D): {"data": "ADC97CAE-4E45-4CDF-B4DA-5021903BE9B8", "success": true, "message": ""}
+--> SUCCESS: Ordered 南京盐水鸭(校验D)
+
+--- TESTING DISH (120/190): 荷塘小炒(校验C) (ID: 35782FB4-2363-447D-8A31-C48603760210) ---
+API Response for 荷塘小炒(校验C): {"data": "7EE3A265-7C59-4978-A096-D5A8C33E0E6F", "success": true, "message": ""}
+--> SUCCESS: Ordered 荷塘小炒(校验C)
+
+--- TESTING DISH (121/190): 夫妻肺片(校验C) (ID: 566325D5-8C96-4B90-808D-EF91C7E5B985) ---
+API Response for 夫妻肺片(校验C): {"data": "4DCAB034-0D97-4329-96FE-BE61EE2C5B52", "success": true, "message": ""}
+--> SUCCESS: Ordered 夫妻肺片(校验C)
+
+--- TESTING DISH (122/190): 秘制羊肉锅仔（生产时间测试） (ID: 4000F08A-D79F-47F1-A0EF-EC90A902A9F0) ---
+API Response for 秘制羊肉锅仔（生产时间测试）: {"data": null, "success": false, "message": "{\r\n  \"text\": \"PrepareTimeNotEnough\",\r\n  \"args\": [\r\n    null,\r\n    \"30\"\r\n  ]\r\n}"}
+--> FAILED: 秘制羊肉锅仔（生产时间测试） - {
+  "text": "PrepareTimeNotEnough",
+  "args": [
+    null,
+    "30"
+  ]
+}
+
+--- TESTING DISH (123/190): Tonkotsu Ramen (ID: 9BF4A678-307E-4D7A-B05A-1DD5F9165187) ---
+API Response for Tonkotsu Ramen: {"data": "5928703C-388E-4B78-ACF5-18DE8BD0C3D9", "success": true, "message": ""}
+--> SUCCESS: Ordered Tonkotsu Ramen
+
+--- TESTING DISH (124/190): 月饼 (ID: CD2D405A-5774-4D01-B724-2A793D7F602E) ---
+API Response for 月饼: {"data": "F2129A0B-189E-47E5-8FB4-DD7D724F2882", "success": true, "message": ""}
+--> SUCCESS: Ordered 月饼
+
+--- TESTING DISH (125/190): 桂花酒酿圆子 (ID: C931DDA1-515E-468E-8471-00FDDCAFDB13) ---
+API Response for 桂花酒酿圆子: {"data": "195F4AD6-A309-49B4-9E9E-5103B148E997", "success": true, "message": ""}
+--> SUCCESS: Ordered 桂花酒酿圆子
+
+--- TESTING DISH (126/190): 杨州煮干丝 (ID: AE6F2D6C-3BD5-4377-AD74-01DFED456C23) ---
+API Response for 杨州煮干丝: {"data": "E724C768-2EFE-47EA-B033-157B676090B1", "success": true, "message": ""}
+--> SUCCESS: Ordered 杨州煮干丝
+
+--- TESTING DISH (127/190): 萝卜牛腩煲 (ID: 3E0DFCEC-C4A6-4723-B8D5-D3AED71F5287) ---
+API Response for 萝卜牛腩煲: {"data": "E871753B-A3A3-4BAE-A46B-2804DDCC7E56", "success": true, "message": ""}
+--> SUCCESS: Ordered 萝卜牛腩煲
+
+--- TESTING DISH (128/190): 鱼香肉丝 (ID: C80B1BFE-4CF5-4C5B-A4C7-0EB28ACAB04A) ---
+API Response for 鱼香肉丝: {"data": "B055BBB5-D65D-49FB-9879-D42FB1BB225A", "success": true, "message": ""}
+--> SUCCESS: Ordered 鱼香肉丝
+
+--- TESTING DISH (129/190): 鱼香茄子 (ID: EAEEDB43-9F1A-4AD1-91FF-E230E10A0259) ---
+API Response for 鱼香茄子: {"data": "0BEA38A2-26FF-4AC9-8646-A343AD22D7F7", "success": true, "message": ""}
+--> SUCCESS: Ordered 鱼香茄子
+
+--- TESTING DISH (130/190): 虾吃虾涮时尚锅套餐 (ID: BBE738B0-B6DD-4042-9FC6-77476FE8820A) ---
+API Response for 虾吃虾涮时尚锅套餐: {"data": "CFD69F4C-0533-4664-B9FC-BF6E1FCC4612", "success": true, "message": ""}
+--> SUCCESS: Ordered 虾吃虾涮时尚锅套餐
+
+--- TESTING DISH (131/190): 04黄金万两黑面 (ID: 2180CDDE-A25A-4FA2-8D35-2DFDD20ECFCB) ---
+API Response for 04黄金万两黑面: {"data": "B9776324-0466-47C6-A42B-0423027069B7", "success": true, "message": ""}
+--> SUCCESS: Ordered 04黄金万两黑面
+
+--- TESTING DISH (132/190): 需要授权菜品 (ID: 3F215EFB-B87A-4189-891B-8034C1211006) ---
+API Response for 需要授权菜品: {"data": "70B581EF-F4B6-4A0B-A54D-97E9176775C8", "success": true, "message": ""}
+--> SUCCESS: Ordered 需要授权菜品
+
+--- TESTING DISH (133/190): 梅干菜扣肉(午餐) (ID: 483A6622-02A8-47E2-B114-C82FD5D6B551) ---
+API Response for 梅干菜扣肉(午餐): {"data": "3E8C27FF-FAD6-4E4C-A4B5-B2156CD1052F", "success": true, "message": ""}
+--> SUCCESS: Ordered 梅干菜扣肉(午餐)
+
+--- TESTING DISH (134/190): 蟹粉狮子头(午餐) (ID: 1116A12D-1D55-4E5E-BAD9-84407BC8D3A1) ---
+API Response for 蟹粉狮子头(午餐): {"data": "65D57849-DED2-4D40-A588-69786B72B838", "success": true, "message": ""}
+--> SUCCESS: Ordered 蟹粉狮子头(午餐)
+
+--- TESTING DISH (135/190): 椒盐排骨(午餐) (ID: BAE1D1DB-F19B-4672-9BBD-B5663CC999C3) ---
+API Response for 椒盐排骨(午餐): {"data": "B1DF56D2-69D5-4115-AA54-6A65A3ACA246", "success": true, "message": ""}
+--> SUCCESS: Ordered 椒盐排骨(午餐)
+
+--- TESTING DISH (136/190): 新年套餐 (ID: D7915F82-E2DD-408D-A763-3A2BBD15C101) ---
+API Response for 新年套餐: {"data": "28F4376C-DD64-45C9-A1D3-21A20281092A", "success": true, "message": ""}
+--> SUCCESS: Ordered 新年套餐
+
+--- TESTING DISH (137/190): 三合一 (ID: D370B353-00E4-4859-BDFB-73A81613A4DE) ---
+API Response for 三合一: {"data": "C60B32A7-6134-4611-914D-C251F0F5BC21", "success": true, "message": ""}
+--> SUCCESS: Ordered 三合一
+
+--- TESTING DISH (138/190): 新年套餐(C) (ID: FDBB6F76-DFCE-47C6-84D2-F8609C1A5289) ---
+API Response for 新年套餐(C): {"data": "69FFCF85-92F6-49B6-A793-8EF2640A00B4", "success": true, "message": ""}
+--> SUCCESS: Ordered 新年套餐(C)
+
+--- TESTING DISH (139/190): 油闷茭白(特价） (ID: 9CB257C4-7434-4339-932A-4FA49BF46510) ---
+API Response for 油闷茭白(特价）: {"data": null, "success": false, "message": "{\r\n  \"text\": \"ProductNotAvailable\",\r\n  \"args\": [\r\n    null\r\n  ]\r\n}"}
+--> FAILED: 油闷茭白(特价） - {
+  "text": "ProductNotAvailable",
+  "args": [
+    null
+  ]
+}
+
+--- TESTING DISH (140/190): 上海咸肉菜饭 (特价） (ID: 4121BCC4-04B4-4FE2-930A-670709834541) ---
+API Response for 上海咸肉菜饭 (特价）: {"data": "A210261E-3BE3-4F62-9EEC-B8286191C1F0", "success": true, "message": ""}
+--> SUCCESS: Ordered 上海咸肉菜饭 (特价）
+
+--- TESTING DISH (141/190): 南京盐水鸭(特价) (ID: B7C67DB1-3035-46DC-9AA7-4B377210FE66) ---
+API Response for 南京盐水鸭(特价): {"data": "40A20873-7C25-48D6-9B27-1BABF0D17B0F", "success": true, "message": ""}
+--> SUCCESS: Ordered 南京盐水鸭(特价)
+
+--- TESTING DISH (142/190): 罗汉素鸭(特价) (ID: 32CC5DC5-6611-4B64-8170-1A940B6F5535) ---
+API Response for 罗汉素鸭(特价): {"data": "1692A42E-51F0-4481-BC39-6FCAF7A28D5B", "success": true, "message": ""}
+--> SUCCESS: Ordered 罗汉素鸭(特价)
+
+--- TESTING DISH (143/190): 经典香辣鱼 (ID: F4EFF9FC-91CD-4331-9423-19BF1F992E48) ---
+API Response for 经典香辣鱼: {"data": "E245643C-1E5A-48F0-9C30-8223F55B8BBA", "success": true, "message": ""}
+--> SUCCESS: Ordered 经典香辣鱼
+
+--- TESTING DISH (144/190): 果味柠檬鱼 (ID: 5DC65A63-7FA3-4CCB-A3D3-9A8C2AFFAC63) ---
+API Response for 果味柠檬鱼: {"data": "F95E5832-50A3-4854-B770-504A4663FD2F", "success": true, "message": ""}
+--> SUCCESS: Ordered 果味柠檬鱼
+
+--- TESTING DISH (145/190): 招牌酸菜鱼（小） (ID: FABEE0FA-6EA2-40C8-A89E-A12757273067) ---
+API Response for 招牌酸菜鱼（小）: {"data": "50D0EFEE-BF83-4BBB-818D-DDA2B17493D4", "success": true, "message": ""}
+--> SUCCESS: Ordered 招牌酸菜鱼（小）
+
+--- TESTING DISH (146/190): 铁板牛肉（起订数量测试） (ID: 5E5B012F-6726-4571-A6B4-CAA2ADAE83A7) ---
+API Response for 铁板牛肉（起订数量测试）: {"data": "641D29FF-7E4E-460B-8402-7D5DCA1EE25F", "success": true, "message": ""}
+--> SUCCESS: Ordered 铁板牛肉（起订数量测试）
+
+--- TESTING DISH (147/190): 服务员辅助加警告信息测试 (ID: 08B5BF73-1F88-4017-A14F-3EF3A0C05D16) ---
+API Response for 服务员辅助加警告信息测试: {"data": "9CD0DF3F-0D0E-4BAF-A7FD-2E8C642FEE1C", "success": true, "message": ""}
+--> SUCCESS: Ordered 服务员辅助加警告信息测试
+
+--- TESTING DISH (148/190): 午餐 (ID: 4270184C-40F8-40C0-8DE2-13B1F91850D2) ---
+API Response for 午餐: {"data": "19801CAD-BCE2-4759-AE4F-4E88BC36957E", "success": true, "message": ""}
+--> SUCCESS: Ordered 午餐
+
+--- TESTING DISH (149/190): 菌菇锅底 (ID: DFC80438-5663-431F-8594-BD5DA7EB08F4) ---
+API Response for 菌菇锅底: {"data": "0BC4B7F3-EA0C-4635-85FD-710483488BCF", "success": true, "message": ""}
+--> SUCCESS: Ordered 菌菇锅底
+
+--- TESTING DISH (150/190): 麻辣火锅 (ID: 7BFCD063-9F10-4242-B22E-10D729A75C25) ---
+API Response for 麻辣火锅: {"data": "8F161ECF-521D-42B6-9719-B2A0FC08BC3E", "success": true, "message": ""}
+--> SUCCESS: Ordered 麻辣火锅
+
+--- TESTING DISH (151/190): 鸳鸯锅底 (ID: 207C774A-CEA2-4D69-90A7-9DD9EFDF244B) ---
+API Response for 鸳鸯锅底: {"data": "C1B8737E-38B4-4059-A550-4958AA6C5BA4", "success": true, "message": ""}
+--> SUCCESS: Ordered 鸳鸯锅底
+
+--- TESTING DISH (152/190): 芝麻酱 (ID: 7258AC29-BC18-4989-BC1C-D53D9ECA3EFF) ---
+API Response for 芝麻酱: {"data": "C8D2C0E4-756E-422E-ADA1-5F04F16A59B7", "success": true, "message": ""}
+--> SUCCESS: Ordered 芝麻酱
+
+--- TESTING DISH (153/190): 香油 (ID: EC7E7744-D256-4605-9896-08F08E4AC02D) ---
+API Response for 香油: {"data": "2F194BC9-BE95-44A8-BE63-231165A2BB10", "success": true, "message": ""}
+--> SUCCESS: Ordered 香油
+
+--- TESTING DISH (154/190): 葱花 (ID: DDDB144F-BB94-44BA-B220-C99A6CD6796D) ---
+API Response for 葱花: {"data": "69CC6E54-0628-4858-8802-1AFF210B2E77", "success": true, "message": ""}
+--> SUCCESS: Ordered 葱花
+
+--- TESTING DISH (155/190): 辣椒油 (ID: 48FD45FC-383D-4523-B548-50A08347161A) ---
+API Response for 辣椒油: {"data": "0A8B0A53-DE04-44CF-AB82-56430EE40889", "success": true, "message": ""}
+--> SUCCESS: Ordered 辣椒油
+
+--- TESTING DISH (156/190): 香菜 (ID: 65F1DF7E-A3D9-49C5-8D06-4C3E33181D31) ---
+API Response for 香菜: {"data": "94929782-5AC4-4F99-8B67-B9B8713F978D", "success": true, "message": ""}
+--> SUCCESS: Ordered 香菜
+
+--- TESTING DISH (157/190): 香醋 (ID: 14D5A700-4E39-4BBD-9B5C-9A6060D945CA) ---
+API Response for 香醋: {"data": "98FFEFB2-3C48-460B-BB07-DC4E13F04726", "success": true, "message": ""}
+--> SUCCESS: Ordered 香醋
+
+--- TESTING DISH (158/190): 鲜鸭血 (ID: CC8C6F45-5E11-4412-9A31-12A5826A9ADA) ---
+API Response for 鲜鸭血: {"data": "4618D6F9-B78C-460C-B390-A0DBE40E35E5", "success": true, "message": ""}
+--> SUCCESS: Ordered 鲜鸭血
+
+--- TESTING DISH (159/190): 大白菜 (ID: 0DED6E72-82E4-4CAB-B07F-82E379E49BDE) ---
+API Response for 大白菜: {"data": "D7BA6707-C051-48F4-8B55-E6C4C3940E82", "success": true, "message": ""}
+--> SUCCESS: Ordered 大白菜
+
+--- TESTING DISH (160/190): 鲜腐竹 (ID: B4288CE3-6C0A-4B52-B89A-620952EA90FA) ---
+API Response for 鲜腐竹: {"data": "132474C5-1A42-450C-97E5-DDFC5563CA71", "success": true, "message": ""}
+--> SUCCESS: Ordered 鲜腐竹
+
+--- TESTING DISH (161/190): 红薯宽粉 (ID: 25168573-8643-4E5E-B003-41B3CBD395AB) ---
+API Response for 红薯宽粉: {"data": "7C04636F-E717-42E9-A844-AFE278B5FDAD", "success": true, "message": ""}
+--> SUCCESS: Ordered 红薯宽粉
+
+--- TESTING DISH (162/190): 油条 (ID: 68DE90F4-3059-4772-A941-3FD87008AE90) ---
+API Response for 油条: {"data": "C40D03B9-F84B-49F5-BF50-C41F3DE8465E", "success": true, "message": ""}
+--> SUCCESS: Ordered 油条
+
+--- TESTING DISH (163/190): 龙口粉丝 (ID: 8E4735D1-6A4F-47AE-9D8C-4D2AC4E69143) ---
+API Response for 龙口粉丝: {"data": "6CF6A740-B406-492F-BD1B-0FB79ED540F5", "success": true, "message": ""}
+--> SUCCESS: Ordered 龙口粉丝
+
+--- TESTING DISH (164/190): 方便面 (ID: D19C4188-97F4-4A8F-84EC-2AE03305290A) ---
+API Response for 方便面: {"data": "5A358C02-432E-4267-B787-93264397C1A5", "success": true, "message": ""}
+--> SUCCESS: Ordered 方便面
+
+--- TESTING DISH (165/190): 乌冬面 (ID: CC3EBBC6-BC11-4066-A49E-7968A16B2E07) ---
+API Response for 乌冬面: {"data": "63EF394A-FFFD-4751-A3A0-FC53332FB90D", "success": true, "message": ""}
+--> SUCCESS: Ordered 乌冬面
+
+--- TESTING DISH (166/190): 三文鱼片 (ID: 6667B0B2-74BC-4174-A253-25095B4FE024) ---
+API Response for 三文鱼片: {"data": "8454E4CE-49E5-4B7F-80D4-7F59FCD4562F", "success": true, "message": ""}
+--> SUCCESS: Ordered 三文鱼片
+
+--- TESTING DISH (167/190): 龙虾 (ID: EEA00F07-4990-4174-8587-9353FDB5B509) ---
+API Response for 龙虾: {"data": "F49836A6-C059-46E3-B283-0C7FBD5D308B", "success": true, "message": ""}
+--> SUCCESS: Ordered 龙虾
+
+--- TESTING DISH (168/190): 鲍鱼 (ID: 0B9AC89B-D482-4EFD-9FEC-2052162D8A3D) ---
+API Response for 鲍鱼: {"data": "DE929031-D721-49E1-A78B-BE38F79074F8", "success": true, "message": ""}
+--> SUCCESS: Ordered 鲍鱼
+
+--- TESTING DISH (169/190): 100免费菜品D组 (ID: 8C7AB094-1664-4331-AA5B-86F8FF17B363) ---
+API Response for 100免费菜品D组: {"data": "1C80D1F2-65B5-4220-BB60-5E48346C13E3", "success": true, "message": ""}
+--> SUCCESS: Ordered 100免费菜品D组
+
+--- TESTING DISH (170/190): 满100可点1D组 (ID: F8DFD098-D0B7-4652-AD42-AE58E80F822A) ---
+API Response for 满100可点1D组: {"data": "931C79AB-D547-48BB-8D2D-E5E7A642415D", "success": true, "message": ""}
+--> SUCCESS: Ordered 满100可点1D组
+
+--- TESTING DISH (171/190): 满30免费菜品A组 (ID: 96B2691C-A0DB-4052-B246-5EBC03A89398) ---
+API Response for 满30免费菜品A组: {"data": "DEB321F1-B0D9-4722-BB8F-1F16FFBE78ED", "success": true, "message": ""}
+--> SUCCESS: Ordered 满30免费菜品A组
+
+--- TESTING DISH (172/190): 满30点1A组 (ID: 1FA5428B-6D9C-4260-BDFF-80DE02414C7B) ---
+API Response for 满30点1A组: {"data": "C3E589D4-061D-474B-8F2C-F2502236D80F", "success": true, "message": ""}
+--> SUCCESS: Ordered 满30点1A组
+
+--- TESTING DISH (173/190): 感恩节套餐 (ID: 4857876F-7037-4B11-A757-F3F7A6E6FEB4) ---
+API Response for 感恩节套餐: {"data": "1A9FB79A-783A-4985-ACB3-A2DE346035C4", "success": true, "message": ""}
+--> SUCCESS: Ordered 感恩节套餐
+
+--- TESTING DISH (174/190): 04黄金万两黑面 (ID: 2180CDDE-A25A-4FA2-8D35-2DFDD20ECFCB) ---
+API Response for 04黄金万两黑面: {"data": "6E1DD630-E76C-4B43-873E-6FFA9F96375F", "success": true, "message": ""}
+--> SUCCESS: Ordered 04黄金万两黑面
+
+--- TESTING DISH (175/190): 番茄豆腐鱼片汤 (ID: FA5E5FA2-48D4-4009-884E-6FCCCED788C9) ---
+API Response for 番茄豆腐鱼片汤: {"data": null, "success": false, "message": "{\r\n  \"text\": \"ProductNotAvailable\",\r\n  \"args\": [\r\n    null\r\n  ]\r\n}"}
+--> FAILED: 番茄豆腐鱼片汤 - {
+  "text": "ProductNotAvailable",
+  "args": [
+    null
+  ]
+}
+
+--- TESTING DISH (176/190): 朝鮮冷面1碗 (ID: F3D65C22-4F14-43AD-95CD-C0DDA8225A07) ---
+API Response for 朝鮮冷面1碗: {"data": "65B8383E-0D0F-4DC8-BB0F-A24CB74353E3", "success": true, "message": ""}
+--> SUCCESS: Ordered 朝鮮冷面1碗
+
+--- TESTING DISH (177/190): 花甲粉1份 (ID: DA71E6DE-1C98-4A22-8414-F79A64595EA1) ---
+API Response for 花甲粉1份: {"data": "73AFD7DA-ABFA-4EB2-9C0F-901CD8814A49", "success": true, "message": ""}
+--> SUCCESS: Ordered 花甲粉1份
+
+--- TESTING DISH (178/190): 爆炒鱿鱼 (ID: 8F77E300-B38B-4AE7-B5F3-6875498343D2) ---
+API Response for 爆炒鱿鱼: {"data": "9EC6E896-9752-4237-80EF-621183076399", "success": true, "message": ""}
+--> SUCCESS: Ordered 爆炒鱿鱼
+
+--- TESTING DISH (179/190): 오징어덮밥 (ID: 31FD8F1A-DF3E-4996-8982-F6CDA90CE9EF) ---
+API Response for 오징어덮밥: {"data": "6B5A91FC-0614-4B34-8001-ED1915E71073", "success": true, "message": ""}
+--> SUCCESS: Ordered 오징어덮밥
+
+--- TESTING DISH (180/190): 콩나물무침 (ID: A48B5AAA-E353-420D-9B4A-0AFBAFFB0701) ---
+API Response for 콩나물무침: {"data": "DD3D3714-517B-4E76-A7A9-AEECA70E3388", "success": true, "message": ""}
+--> SUCCESS: Ordered 콩나물무침
+
+--- TESTING DISH (181/190): 된장찌개 (ID: C63F2FEE-BE81-469A-BE06-404B82C0C66E) ---
+API Response for 된장찌개: {"data": "076C99FD-0639-417C-B34E-CE1927E03FB9", "success": true, "message": ""}
+--> SUCCESS: Ordered 된장찌개
+
+--- TESTING DISH (182/190): 부대찌개 (ID: 6CAD522A-DD64-47BA-BAAB-8BFCE7FC2EB1) ---
+API Response for 부대찌개: {"data": "A7D58E7D-A282-4188-A284-42CBAA2661FC", "success": true, "message": ""}
+--> SUCCESS: Ordered 부대찌개
+
+--- TESTING DISH (183/190): 周一特供咖啡 (ID: 40A7D1AD-05AB-475F-B264-27CE868664B9) ---
+API Response for 周一特供咖啡: {"data": null, "success": false, "message": "{\r\n  \"text\": \"ProductNotAvailable\",\r\n  \"args\": [\r\n    null\r\n  ]\r\n}"}
+--> FAILED: 周一特供咖啡 - {
+  "text": "ProductNotAvailable",
+  "args": [
+    null
+  ]
+}
+
+--- TESTING DISH (184/190): 周二特供咖啡 (ID: 8CD688EA-72E3-4146-AA2A-57D3AE8B9F67) ---
+API Response for 周二特供咖啡: {"data": "C4A5C82F-CE06-4945-AEE0-3D048868C84D", "success": true, "message": ""}
+--> SUCCESS: Ordered 周二特供咖啡
+
+--- TESTING DISH (185/190): 周三特供菜品 (ID: D2549802-BF45-4FEA-9A59-82D3ED82FC79) ---
+API Response for 周三特供菜品: {"data": null, "success": false, "message": "{\r\n  \"text\": \"ProductNotAvailable\",\r\n  \"args\": [\r\n    null\r\n  ]\r\n}"}
+--> FAILED: 周三特供菜品 - {
+  "text": "ProductNotAvailable",
+  "args": [
+    null
+  ]
+}
+
+--- TESTING DISH (186/190): 周四特供菜品 (ID: D335B8AF-B9E1-4F87-9279-1F0F47454099) ---
+API Response for 周四特供菜品: {"data": null, "success": false, "message": "{\r\n  \"text\": \"ProductNotAvailable\",\r\n  \"args\": [\r\n    null\r\n  ]\r\n}"}
+--> FAILED: 周四特供菜品 - {
+  "text": "ProductNotAvailable",
+  "args": [
+    null
+  ]
+}
+
+--- TESTING DISH (187/190): 周五特供菜品 (ID: 5F30E2D3-8E78-4633-B7EE-6C2658D3E1DF) ---
+API Response for 周五特供菜品: {"data": null, "success": false, "message": "{\r\n  \"text\": \"ProductNotAvailable\",\r\n  \"args\": [\r\n    null\r\n  ]\r\n}"}
+--> FAILED: 周五特供菜品 - {
+  "text": "ProductNotAvailable",
+  "args": [
+    null
+  ]
+}
+
+--- TESTING DISH (188/190): 周六特供菜品 (ID: 3023FB38-9364-4BBC-AE07-167585B57256) ---
+API Response for 周六特供菜品: {"data": null, "success": false, "message": "{\r\n  \"text\": \"ProductNotAvailable\",\r\n  \"args\": [\r\n    null\r\n  ]\r\n}"}
+--> FAILED: 周六特供菜品 - {
+  "text": "ProductNotAvailable",
+  "args": [
+    null
+  ]
+}
+
+--- TESTING DISH (189/190): 周日特供咖啡 (ID: 232F4A96-C1C8-48D5-93D8-8CF9D5B20034) ---
+API Response for 周日特供咖啡: {"data": null, "success": false, "message": "{\r\n  \"text\": \"ProductNotAvailable\",\r\n  \"args\": [\r\n    null\r\n  ]\r\n}"}
+--> FAILED: 周日特供咖啡 - {
+  "text": "ProductNotAvailable",
+  "args": [
+    null
+  ]
+}
+
+--- TESTING DISH (190/190): 周一免费菜品 (ID: 83EA18C3-3838-49C8-A583-AC468315CFF9) ---
+API Response for 周一免费菜品: {"data": "7221F215-3AF9-4C1C-B4F8-FFC4BFF5F601", "success": true, "message": ""}
+--> SUCCESS: Ordered 周一免费菜品
+
+--- TEST SUMMARY ---
+Total dishes tested: 190
+Successful orders: 171
+Failed orders: 19
+Test finished at: 2025-06-10T20:39:39.619205
+Results saved to test_results.log

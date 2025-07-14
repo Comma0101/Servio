@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: servio-voice-agent
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: servio-voice-agent
+  template:
+    metadata:
+      labels:
+        app: servio-voice-agent
+    spec:
+      containers:
+        - name: servio-voice-agent
+          image: us-west1-docker.pkg.dev/serviio-465422/servio-images/servio-voice-agent:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              until pg_isready -h 127.0.0.1 -p 5432; do
+                echo "Waiting for database to be ready..."
+                sleep 2
+              done
+              if psql -h 127.0.0.1 -p 5432 -U postgres -lqt | cut -d \| -f 1 | grep -qw servio; then
+                echo "Database 'servio' already exists."
+              else
+                echo "Database 'servio' does not exist. Creating..."
+                createdb -h 127.0.0.1 -p 5432 -U postgres servio
+                echo "Database 'servio' created."
+              fi
+              psql -h 127.0.0.1 -p 5432 -U postgres -d servio -f /app/init.sql
+              /app/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 5050
+          volumeMounts:
+            - name: init-sql
+              mountPath: /app/init.sql
+              subPath: init.sql
+          ports:
+            - containerPort: 5050
+          imagePullPolicy: Always
+          env:
+            - name: PUBLIC_BASE_URL
+              value: "https://api.serviio.ai"
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: servio-env
+                  key: DB_PASSWORD
+            - name: DEEPGRAM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: servio-env
+                  key: DEEPGRAM_API_KEY
+          envFrom:
+            - secretRef:
+                name: servio-env
+        - name: cloud-sql-proxy
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.8.0
+          args:
+            - "serviio-465422:us-west1:servio-postgres"
+            - "--port=5432"
+            - "--credentials-file=/etc/cloudsql-instance-credentials/credentials.json"
+          startupProbe:
+            exec:
+              command: ["/bin/sh", "-c", "pg_isready -h 127.0.0.1 -p 5432"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 6
+          securityContext:
+            runAsNonRoot: true
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+          volumeMounts:
+            - name: cloudsql-instance-credentials
+              mountPath: /etc/cloudsql-instance-credentials
+              readOnly: true
+      volumes:
+        - name: cloudsql-instance-credentials
+          secret:
+            secretName: cloudsql-instance-credentials
+        - name: init-sql
+          configMap:
+            name: servio-init-sql

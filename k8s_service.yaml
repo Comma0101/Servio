@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: servio-voice-agent-service
+  annotations:
+    cloud.google.com/backend-config: '{"default": "servio-backend-config"}'
+spec:
+  selector:
+    app: servio-voice-agent
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 5050

@@ -2,7 +2,7 @@
 API endpoints for handling Twilio voice calls and webhooks
 """
 from fastapi import APIRouter, Request, Response, HTTPException, BackgroundTasks
-from twilio.twiml.voice_response import VoiceResponse, Connect, Say, Stream, Gather, Start, Transcription
+from twilio.twiml.voice_response import VoiceResponse, Connect, Say, Stream, Gather, Start
 from twilio.rest import Client
 from openai import AsyncOpenAI
 import os
@@ -20,6 +20,9 @@ router = APIRouter(prefix="/api", tags=["voice"])
 
 # Create additional router for database operations
 db_router = APIRouter(prefix="/api/db", tags=["database"])
+
+# Create router for English Menu operations
+menu_router = APIRouter(prefix="/api/menu", tags=["Menu"])
 
 # Cache for OpenAI clients to avoid connection overhead
 _openai_client_cache = {}
@@ -46,68 +49,90 @@ def get_openai_client(api_key, timeout=4.0, max_retries=0):
     return client
 
 
-@router.post("/incoming-call")
+@router.api_route("/incoming-call", methods=["GET", "POST"])
 async def handle_incoming_call(request: Request):
     """Handle incoming calls from Twilio"""
     try:
-        # Get restaurant configuration
-        restaurant_id = os.getenv("RESTAURANT_ID", "LIMF")
+        # Get restaurant_id from query parameters, default to LIMF if not provided
+        restaurant_id_from_query = request.query_params.get("restaurant_id")
+        restaurant_id = restaurant_id_from_query or os.getenv("RESTAURANT_ID", "LIMF")
+        logger.info(f"Handling incoming call for restaurant_id: {restaurant_id}")
+
         restaurant_config = get_restaurant_config(restaurant_id)
-        twilio_voice = restaurant_config.get("TWILIO_VOICE", "Polly.Joanna-Neural")
+        # Use a generic welcome voice or a restaurant-specific one if defined
+        welcome_voice = restaurant_config.get("TWILIO_WELCOME_VOICE", restaurant_config.get("TWILIO_VOICE", "Polly.Joanna-Neural"))
         
-        # Parse form data from the request
-        form_data = await request.form()
-        
-        # Extract and log key information
-        caller_phone = form_data.get("From")
-        call_sid = form_data.get("CallSid")
-        account_sid = form_data.get("AccountSid")
+        # Get the selected language digit from either form data (POST) or query params (GET)
+        if request.method == "POST":
+            form_data = await request.form()
+            caller_phone = form_data.get("From")
+            call_sid = form_data.get("CallSid")
+            account_sid = form_data.get("AccountSid")
+        else:  # GET
+            caller_phone = request.query_params.get("From")
+            call_sid = request.query_params.get("CallSid")
+            account_sid = request.query_params.get("AccountSid")
         
         # Caller info (phone, language) will be stored after language selection
             
         # Log the incoming call data
-        logger.info(f"Received incoming call: CallSid={call_sid}, From={caller_phone}, AccountSid={account_sid}")
+        logger.info(f"Received incoming call for {restaurant_id}: CallSid={call_sid}, From={caller_phone}, AccountSid={account_sid}")
         
         # Get host information for building callback URLs
         host = request.url.hostname
         port = request.url.port
         scheme = "https" if request.url.scheme == "https" else "http"
         
-        # Build the callback URL for language selection
+        # Build the callback URL for language selection, including restaurant_id
+        base_action_url = f"{scheme}://{host}"
         if port and port not in (80, 443):
-            callback_url = f"{scheme}://{host}:{port}/api/language-selection"
-        else:
-            callback_url = f"{scheme}://{host}/api/language-selection"
+            base_action_url += f":{port}"
+        
+        # Ensure restaurant_id is included in the action URL for language selection
+        action_url_with_restaurant = f"{base_action_url}/api/language-selection?restaurant_id={restaurant_id}"
         
         # Create TwiML response with language selection
         response = VoiceResponse()
         
         # Add a brief welcome greeting
+        # Use restaurant_name from config if available for the welcome message
+        restaurant_name = restaurant_config.get("RESTAURANT_NAME", "our restaurant")
         response.say(
-            "Welcome to our restaurant.",
-            voice=twilio_voice
+            f"Welcome to {restaurant_name}.",
+            voice=welcome_voice # Use the determined welcome voice
         )
         
         # Add Gather for language selection - must use response.gather() 
         # so it's properly nested in the TwiML flow
         gather = response.gather(
             num_digits=1,
-            action=callback_url,
+            action=action_url_with_restaurant, # Use URL with restaurant_id
             method="POST",
             timeout=10
         )
         
         # Prompt for language selection
+        # Use the English voice from config for the English part
+        twilio_voice_en = restaurant_config.get("TWILIO_VOICE_EN", "Polly.Joanna-Neural") # Fallback to a generic English voice
         gather.say(
-            "For English, press 1. For Chinese, press 2.",
-            voice=twilio_voice,
+            "For English, press 1.",
+            voice=twilio_voice_en,
             language="en-US"
+        )
+        # Use the Chinese voice from config for the Chinese part
+        twilio_voice_zh = restaurant_config.get("TWILIO_VOICE_ZH", "Polly.Zhiyu-Neural") # Fallback to a generic Chinese voice
+        gather.say(
+            "中文请按2。", # "For Chinese, press 2."
+            voice=twilio_voice_zh,
+            language="cmn-CN" # Use cmn-CN for Mandarin
         )
         
         # This code only executes AFTER the gather timeout expires
         # If no input is received, default to English with an explanation
-        response.say("We didn't receive your selection. Continuing in English.", voice=twilio_voice)
-        response.redirect(f"{callback_url}?Digits=1", method="POST")
+        # Ensure the redirect also includes the restaurant_id
+        timeout_redirect_url = f"{action_url_with_restaurant}&Digits=1" # Append Digits=1 for timeout default
+        response.say(f"We didn't receive your selection. Continuing in English for {restaurant_name}.", voice=welcome_voice)
+        response.redirect(timeout_redirect_url, method="POST")
         
         # Return the TwiML response
         return Response(content=str(response), media_type="application/xml")
@@ -115,50 +140,51 @@ async def handle_incoming_call(request: Request):
         logger.error(f"Error handling incoming call: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-@router.post("/language-selection")
+@router.api_route("/language-selection", methods=["GET", "POST"])
 async def handle_language_selection(request: Request):
     """Handle language selection and connect to WebSocket or start transcription"""
     try:
-        # Parse form data from the request
-        form_data = await request.form()
+        # Get restaurant_id from query parameters (passed from incoming-call)
+        # Fallback to environment variable then LIMF if not in query (e.g. direct POST or timeout)
+        restaurant_id_from_query = request.query_params.get("restaurant_id")
+        restaurant_id = restaurant_id_from_query or os.getenv("RESTAURANT_ID", "LIMF")
+        logger.info(f"Handling language selection for restaurant_id: {restaurant_id}")
 
-        # Get the selected language digit
-        selected_digit = form_data.get("Digits", "1")  # Default to English (1)
-        call_sid = form_data.get("CallSid")
-        caller_phone = form_data.get("From")
+        # Get the selected language digit from either form data (POST) or query params (GET)
+        if request.method == "POST":
+            form_data = await request.form()
+            selected_digit = form_data.get("Digits", "1")
+            call_sid = form_data.get("CallSid")
+            caller_phone = form_data.get("From")
+        else:  # GET
+            selected_digit = request.query_params.get("Digits", "1")
+            call_sid = request.query_params.get("CallSid")
+            caller_phone = request.query_params.get("From")
 
         # Determine language from digit
         language = "chinese" if selected_digit == "2" else "english"
 
-        logger.info(f"Language selected: {language} (digit {selected_digit}) for call {call_sid}")
+        logger.info(f"Language selected: {language} (digit {selected_digit}) for call {call_sid} at restaurant {restaurant_id}")
 
-        # Get restaurant configuration
-        restaurant_id = os.getenv("RESTAURANT_ID", "default-restaurant")
+        # Get restaurant configuration using the determined restaurant_id
         restaurant_config = get_restaurant_config(restaurant_id)
         twilio_voice_en = restaurant_config.get("TWILIO_VOICE_EN", "Polly.Joanna-Neural")
         twilio_voice_zh = restaurant_config.get("TWILIO_VOICE_ZH", "Polly.Zhiyu-Neural")
 
         # Update caller info with language preference using the global store
-        from app.api.websocket import store_caller_info # Import the correct function
+        # Also pass restaurant_id to be stored if needed later, or ensure it's passed to WebSocket
+        from app.api.websocket import store_caller_info 
         if caller_phone and call_sid:
-            store_caller_info(call_sid, caller_phone, language) # Use the correct function
+            # Store language and potentially restaurant_id if your store_caller_info supports it
+            # For now, just language. restaurant_id will be passed to WebSocket via parameters.
+            store_caller_info(call_sid, caller_phone, language)
 
         # Create TwiML response
         response = VoiceResponse()
 
         # Get host information for building URLs
-        host = request.url.hostname
-        port = request.url.port
-        http_scheme = "https" if request.url.scheme == "https" else "http"
-        ws_scheme = "wss" if request.url.scheme == "https" else "ws"
-
-        # Build base URLs
-        if port and port not in (80, 443):
-            base_http_url = f"{http_scheme}://{host}:{port}"
-            base_ws_url = f"{ws_scheme}://{host}:{port}"
-        else:
-            base_http_url = f"{http_scheme}://{host}"
-            base_ws_url = f"{ws_scheme}://{host}"
+        from app.config import settings
+        base_ws_url = settings.PUBLIC_BASE_URL.replace("http", "ws")
 
         # Determine WebSocket URL based on language
         if language == "english":
@@ -166,13 +192,11 @@ async def handle_language_selection(request: Request):
         else: # chinese
             ws_url = f"{base_ws_url}/api/ws/{call_sid}" # Endpoint for Chinese/Google Speech
 
-        transcription_callback_url = f"{base_http_url}/api/transcription-callback" # This might be deprecated or unused
-
         if language == "english":
             response.say(
                 "You selected English. Connecting you to our restaurant assistant.",
-                voice=twilio_voice_en
-            )
+                    voice=twilio_voice_en
+                )
             response.pause(length=1)
             logger.info(f"Connecting to WebSocket for English (Deepgram): {ws_url}")
             connect = Connect()
@@ -207,15 +231,15 @@ async def handle_language_selection(request: Request):
             except Exception as db_err:
                 logger.error(f"Error inserting call record: {db_err}")
             
-            # Get restaurant configuration
-            restaurant_id = os.getenv("RESTAURANT_ID", "default-restaurant")
-            restaurant_config = get_restaurant_config(restaurant_id)
-            chinese_voice = restaurant_config.get("TWILIO_VOICE_ZH", "Polly.Zhiyu-Neural")
+            # Get restaurant configuration using the determined restaurant_id
+            # This was already done above, so restaurant_config and twilio_voice_zh are set
+            # chinese_voice = restaurant_config.get("TWILIO_VOICE_ZH", "Polly.Zhiyu-Neural") # Already fetched
 
-            # Initial greeting in Chinese
+            # Initial greeting in Chinese, potentially restaurant-specific
+            restaurant_name_cn = restaurant_config.get("RESTAURANT_NAME_CN", "我们的餐厅") # Default if not set
             response.say(
-                "您好！欢迎致电我们的餐厅,正在帮您连接", 
-                voice=chinese_voice,
+                f"您好！欢迎致电{restaurant_name_cn}，正在帮您连接",
+                voice=twilio_voice_zh, # Use the fetched Chinese voice
                 language="cmn-Hans-CN" # Mandarin Chinese language code for Polly voice
             )
             response.pause(length=1) # Pause to ensure greeting is fully played before streaming starts
@@ -228,6 +252,8 @@ async def handle_language_selection(request: Request):
             # These will be read by the websocket_call_handler in websocket.py
             stream.parameter(name="language", value="chinese")
             stream.parameter(name="restaurant_id", value=restaurant_id)
+            # Add the new parameter to activate Deepgram STT for Chinese
+            stream.parameter(name="use_deepgram_stt_chinese", value="true")
             connect.append(stream)
             response.append(connect)
 
@@ -379,3 +405,67 @@ async def get_utterances_by_call(call_sid: str):
     except Exception as e:
         logger.error(f"Error retrieving call utterances: {e}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+# ─── Menu Endpoints ─────────────────────────────────────────────────
+from app.utils.thirty_nine_miles import ( # Using user-confirmed filename module
+    get_extracted_dishes as get_menu_extracted_dishes,
+    find_dish_by_chinese_name as find_menu_dish_by_chinese_name,
+    add_order as add_menu_order,
+    ApiOrderDto as MenuApiOrderDto
+)
+
+@menu_router.get("/extracted-dishes/{portal_id}")
+async def get_extracted_dishes_endpoint(portal_id: str):
+    """Fetches and processes the detailed menu to return a flat list of dishes from the Menu API."""
+    try:
+        result = await get_menu_extracted_dishes(portal_id)
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("message", "Failed to extract dishes from Menu"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in /extracted-dishes/{portal_id} (Menu) endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@menu_router.get("/full-menu/{portal_id}")
+async def get_full_menu_endpoint(portal_id: str):
+    """Fetches and returns the entire menu for a given portal."""
+    try:
+        result = await get_menu_extracted_dishes(portal_id)
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("message", "Failed to extract dishes from Menu"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in /full-menu/{portal_id} endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@menu_router.get("/find-dish/{portal_id}/{chinese_name}")
+async def find_dish_by_name_endpoint(portal_id: str, chinese_name: str):
+    """Finds a dish by its Chinese name using the Menu data."""
+    try:
+        dish_info = await find_menu_dish_by_chinese_name(portal_id, chinese_name)
+        if dish_info:
+            return {"success": True, "data": dish_info}
+        else:
+            raise HTTPException(status_code=404, detail=f"Dish with Chinese name '{chinese_name}' not found in portal {portal_id} via Menu API.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in /find-dish/{portal_id}/{chinese_name} (Menu) endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@menu_router.post("/order/add")
+async def add_order_to_menu_endpoint(order_data: MenuApiOrderDto):
+    """Creates a new order in the Menu system."""
+    try:
+        result = await add_menu_order(order_data)
+        return result
+    except HTTPException:
+        raise 
+    except Exception as e:
+        logger.error(f"Error in /order/add (Menu) endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")

@@ -41,3 +41,31 @@ def ulaw_to_pcm(ulaw_data: bytes, sample_width: int = 2) -> bytes:
 def bytes_to_base64(data: bytes) -> str:
     """Encode bytes to a base64 string."""
     return base64.b64encode(data).decode('utf-8')
+
+# 24 kHz ➜ 8 kHz μ-law helper
+from pydub import AudioSegment, effects
+
+def narrowband(payload_24k_pcm: bytes) -> bytes:
+    """
+    Converts 24kHz 16-bit linear PCM audio to 8kHz µ-law.
+    """
+    try:
+        seg = AudioSegment(
+            payload_24k_pcm,
+            sample_width=2,  # 16-bit
+            frame_rate=24000,
+            channels=1
+        )
+        # Normalization can be helpful but consider if it's always desired
+        # seg = effects.normalize(seg)
+        
+        # First, resample to 8kHz while keeping it 16-bit PCM
+        pcm_8k_16bit_segment = seg.set_frame_rate(8000).set_sample_width(2)
+        
+        # Then, convert 16-bit linear PCM to µ-law
+        ulaw_8k_data = audioop.lin2ulaw(pcm_8k_16bit_segment.raw_data, 2)
+        
+        return ulaw_8k_data
+    except Exception as e:
+        logger.error(f"Error in narrowband conversion: {e}", exc_info=True)
+        raise

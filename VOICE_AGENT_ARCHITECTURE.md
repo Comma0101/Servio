@@ -4,23 +4,30 @@ This document outlines the architecture of the voice agent system, detailing the
 
 ## 1. Overall Call Flow
 
-The system handles voice calls through a series of steps orchestrated by Twilio TwiML and FastAPI backend services.
+The system handles voice calls through a series of steps orchestrated by Twilio TwiML and FastAPI backend services. It supports a multi-restaurant setup where different Twilio phone numbers can route to specific restaurant configurations.
 
-1.  **Incoming Call Reception**:
+1.  **Incoming Call Reception & Restaurant Identification**:
 
-    - Twilio receives an incoming call and makes a POST request to `/api/incoming-call` (defined in `app/api/endpoints.py`).
-    - This endpoint plays an initial generic welcome message ("Welcome to our restaurant.").
-    - It then uses TwiML `<Gather>` to prompt the user for language selection (Press 1 for English, Press 2 for Chinese).
-    - The user's selection (or timeout) is POSTed to `/api/language-selection`.
+    - Twilio receives an incoming call on a specific phone number.
+    - The webhook for this number is configured to make a POST request to `/api/incoming-call` and **must include a `restaurant_id` query parameter** (e.g., `/api/incoming-call?restaurant_id=LIMF`).
+    - The `/api/incoming-call` endpoint (in `app/api/endpoints.py`):
+      - Reads the `restaurant_id` from the query parameters (defaulting to "LIMF" if not provided or if `RESTAURANT_ID` env var is not set).
+      - Fetches the corresponding restaurant's configuration (e.g., name, welcome voice) from `app/constants.py`.
+      - Plays a restaurant-specific welcome message (e.g., "Welcome to KK Restaurant.").
+      - Uses TwiML `<Gather>` to prompt the user for language selection. The prompt is delivered bilingually:
+        - "For English, press 1." (using the restaurant's configured English voice).
+        - "中文请按 2。" (using the restaurant's configured Chinese voice).
+      - The `action` URL for the `<Gather>` includes the `restaurant_id` as a query parameter.
+    - The user's selection (or timeout) is POSTed to `/api/language-selection?restaurant_id=<restaurant_id>`.
 
 2.  **Language Selection & WebSocket Connection**:
     - The `/api/language-selection` endpoint (in `app/api/endpoints.py`):
+      - Reads the `restaurant_id` from query parameters.
+      - Fetches the restaurant's configuration.
       - Determines the selected language.
       - Stores caller information (phone, language, call SID) in an in-memory dictionary (`active_call_info` in `app/api/websocket.py`).
-      - Plays a language-specific connecting message using TwiML `<Say>`:
-        - **English**: "You selected English. Connecting you to our restaurant assistant."
-        - **Chinese**: "您好！欢迎致电我们的餐厅,正在帮您连接"
-      - Uses TwiML `<Connect><Stream>` to establish a WebSocket connection to the appropriate backend endpoint based on the language:
+      - Plays a language-specific and potentially restaurant-specific connecting message using TwiML `<Say>` (e.g., "You selected English. Connecting you to KK Restaurant's assistant.").
+      - Uses TwiML `<Connect><Stream>` to establish a WebSocket connection to the appropriate backend endpoint based on the language. **Crucially, it passes the `restaurant_id` as a custom parameter within the `<Stream>` tag.**
         - **English**: Connects to `wss://<your_host>/api/media-stream`.
         - **Chinese**: Connects to `wss://<your_host>/api/ws/{call_sid}`.
 
@@ -31,11 +38,12 @@ The Chinese voice agent leverages Google Cloud Speech-to-Text, OpenAI GPT-4o for
 - **WebSocket Endpoint**: `/api/ws/{call_sid}`
 
   - Handled by the `websocket_call_handler` function in `app/api/websocket.py`.
-  - This handler instantiates `ChineseAudioHandler`.
+  - This handler receives the `restaurant_id` via stream parameters.
+  - It instantiates `ChineseAudioHandler`, passing the `restaurant_id` and the corresponding `SYSTEM_MESSAGE_CN` (or fallback `SYSTEM_MESSAGE`) fetched from `app/constants.py`.
 
 - **Handler Class**: `ChineseAudioHandler` (in `app/handlers/chinese_audio_handler.py`)
 
-  - Manages the lifecycle of the Chinese agent for a specific call.
+  - Manages the lifecycle of the Chinese agent for a specific call, using the system message provided by the `websocket_call_handler`.
 
 - **Speech-to-Text (STT)**: Google Cloud Speech-to-Text (Async Client)
 
@@ -54,7 +62,7 @@ The Chinese voice agent leverages Google Cloud Speech-to-Text, OpenAI GPT-4o for
     - Receives the assistant's text response.
     - Appends the assistant's response to `self.conversation_history`.
   - `self.conversation_history`: An instance variable (list of message objects) that stores the conversation turn-by-turn, providing context to GPT-4o. Initialized with a system message.
-  - **System Message Update (as of 2025-05-14)**: The default system message for `ChineseAudioHandler` has been updated to a more detailed prompt in Chinese. This prompt guides GPT-4o on persona, conversation flow, item collection, use of 'IN PROGRESS'/'DONE' statuses, and when to use the `order_summary` function. It also includes specific instructions on politeness, menu adherence, order confirmation, SMS notification, and conciseness.
+  - **System Message**: The system message is now dynamically loaded based on `restaurant_id` and language. `app/constants.py` stores `SYSTEM_MESSAGE_CN` for each configured restaurant. The `ChineseAudioHandler` itself no longer defines the primary default system message.
 
 - **Function Calling (`order_summary` Tool) (Implemented 2025-05-14)**:
 
@@ -70,7 +78,7 @@ The Chinese voice agent leverages Google Cloud Speech-to-Text, OpenAI GPT-4o for
   - **Backend Logic (`_execute_order_summary_tool`)**:
     - This asynchronous method in `ChineseAudioHandler` handles the execution of the `order_summary` tool.
     - It receives parsed arguments (`items`, `total_price`, `summary`) from GPT-4o.
-    - It calls `app.services.database_service.save_order_details` to persist the order information.
+    - It calls `app.services.database_service.save_order_details` which now persists the order information by storing a generated `order_id` and a JSON object containing order `items`, `total_price`, and `status` (derived from the `summary` argument) into the `metadata` column of the `calls` table, associated with the `call_sid`.
     - If the `summary` status is "DONE" and a caller phone number is available (passed during handler initialization), it schedules an SMS confirmation via `app.utils.twilio.send_sms`.
     - **Note**: This implementation currently does _not_ interact with Square for order creation or payment processing.
     - It returns a JSON string summarizing the outcome (e.g., internal order ID, SMS status) to be relayed to GPT-4o.
@@ -91,7 +99,7 @@ The Chinese voice agent leverages Google Cloud Speech-to-Text, OpenAI GPT-4o for
 
 - **Key Files**:
   - `app/api/endpoints.py`: Handles initial call setup and TwiML for connecting to WebSocket.
-  - `app/api/websocket.py`: `websocket_call_handler` function instantiates and manages `ChineseAudioHandler`. It now retrieves and passes the `caller_phone` to the `ChineseAudioHandler` during initialization to prevent circular dependencies.
+  - `app/api/websocket.py`: `websocket_call_handler` function instantiates and manages `ChineseAudioHandler`, providing it with the correct `restaurant_id` and system message. It also retrieves and passes the `caller_phone` to the `ChineseAudioHandler`.
   - `app/handlers/chinese_audio_handler.py`: Contains the core logic for the Chinese agent, including VAD, STT/TTS integration, NLU via OpenAI, and the new function calling capabilities.
 
 ## 3. English Voice Agent
@@ -101,11 +109,12 @@ The English voice agent primarily utilizes Deepgram for STT, NLU (via its "think
 - **WebSocket Endpoint**: `/api/media-stream`
 
   - Handled by the `handle_media_stream` function in `app/api/websocket.py`.
-  - This handler sets up and interacts with `DeepgramService` and `AudioHandler`.
+  - This handler receives the `restaurant_id` via stream parameters.
+  - It sets up and interacts with `DeepgramService` and `AudioHandler`, passing the `restaurant_id` and using it to fetch the appropriate system message (including menu) from `app/constants.py`.
 
 - **Handler Class**: `AudioHandler` (in `app/handlers/audio_handler.py`)
 
-  - Manages interaction with Deepgram.
+  - Manages interaction with Deepgram, initialized with a restaurant-specific system message.
   - Processes messages from Twilio and responses from Deepgram.
 
 - **Core Service**: `DeepgramService` (in `app/services/deepgram_service.py`)
@@ -142,9 +151,9 @@ The English voice agent primarily utilizes Deepgram for STT, NLU (via its "think
 
 - **Audio Recording Upload**:
 
-  - Upon call completion (`stop` event), `AudioHandler._handle_stop_event` attempts to upload the full call audio (accumulated in `self.complete_audio_buffer`) to S3.
-  - **Note**: The code currently tries to import the upload utility from `app/utils/database.upload_audio_to_s3`, but the file `app/utils/database.py` does not exist in the listed project structure. This functionality may be incomplete or the utility located elsewhere.
-  - If successful, the S3 URL is intended to be saved with the call record in the database via `save_call_end` in `app/services/database_service.py`.
+  - Upon call completion (`stop` event), `AudioHandler._handle_stop_event` uploads the full call audio, which is accumulated in `self.complete_audio_buffer` during the call, to S3.
+  - This is handled by the `upload_audio_to_s3` function in `app/utils/database.py`.
+  - If successful, the S3 URL is saved with the call record in the database via `save_call_end` in `app/services/database_service.py`.
 
 - **Key Files**:
   - `app/api/endpoints.py`: Handles initial call setup and TwiML for connecting to WebSocket.
@@ -157,29 +166,59 @@ The English voice agent primarily utilizes Deepgram for STT, NLU (via its "think
 ## 4. Configuration
 
 - **Environment Variables** (loaded from `.env` file by `dotenv`):
-  - `OPENAI_API_KEY`: For GPT-4o (used by both Chinese agent directly and English agent via Deepgram).
-  - `DEEPGRAM_API_KEY`: For Deepgram services (English agent).
-  - `RESTAURANT_ID`: Identifies the current restaurant configuration.
-  - `TWILIO_VOICE`, `TWILIO_VOICE_EN`, `TWILIO_VOICE_ZH`: Specify Twilio Polly voices for TwiML `<Say>` verbs.
+  - `OPENAI_API_KEY`: For GPT-4o.
+  - `DEEPGRAM_API_KEY`: For Deepgram services.
+  - `RESTAURANT_ID`: This environment variable acts as a fallback if `restaurant_id` is not provided via Twilio webhook query parameters. The primary method for identifying the restaurant is now the webhook parameter.
   - Google Cloud credentials (typically via `GOOGLE_APPLICATION_CREDENTIALS` environment variable) for Google STT and TTS.
-- **Restaurant Configuration**:
-  - Managed by `get_restaurant_config()` and `get_restaurant_menu()` in `app/utils/constants.py`.
-  - Provides restaurant name, menu items, etc., used in system prompts.
+- **Restaurant Configuration (`app/constants.py`)**:
+  - This file now holds configurations for multiple restaurants, keyed by a unique `restaurant_id` (e.g., "LIMF", "TEST_RESTAURANT").
+  - Each restaurant's configuration includes:
+    - `SYSTEM_MESSAGE` (for English agent)
+    - `SYSTEM_MESSAGE_CN` (for Chinese agent)
+    - `RESTAURANT_NAME`, `RESTAURANT_NAME_CN`
+    - Twilio voices (`TWILIO_VOICE`, `TWILIO_VOICE_EN`, `TWILIO_VOICE_ZH`)
+    - `MENU` (can be specific per restaurant)
+    - Other settings like `TAX`, `ASSISTANT_ID`, etc.
+  - Helper functions in `app/utils/constants.py` (`get_restaurant_config()`, `get_restaurant_menu()`) are used to retrieve these configurations based on the active `restaurant_id`.
 
-## 5. Data Storage
+## 5. Multi-Restaurant Setup
+
+To support multiple restaurants, each with its own phone number and distinct voice agent behavior:
+
+1.  **Twilio Phone Number Configuration**:
+
+    - Assign a unique Twilio phone number to each restaurant.
+    - In the Twilio console, configure the "Voice & Fax" settings for each number.
+    - The "A CALL COMES IN" webhook should be set to `POST` to your application's `/api/incoming-call` endpoint.
+    - **Crucially, append a unique `restaurant_id` query parameter to this webhook URL for each number.**
+      - Example for LIMF: `https://<your_host>/api/incoming-call?restaurant_id=LIMF`
+      - Example for Test Restaurant: `https://<your_host>/api/incoming-call?restaurant_id=TEST_RESTAURANT`
+
+2.  **`app/constants.py` Configuration**:
+
+    - Define a configuration block within the `CONSTANTS` dictionary for each `restaurant_id` used in the webhooks. This block will contain all specific settings for that restaurant (system messages, voices, menu, etc.).
+
+3.  **Application Logic**:
+    - The application (starting from `/api/incoming-call`) reads the `restaurant_id` from the webhook.
+    - This `restaurant_id` is propagated through the call setup process (language selection, WebSocket connection parameters).
+    - Handlers and services use this `restaurant_id` to load the correct configurations, ensuring a tailored experience for each restaurant.
+
+## 6. Data Storage
 
 - **Call Records & Utterances**:
   - Stored in a PostgreSQL database.
-  - **Schema Definition**: The `calls` and `utterances` table schemas (`CREATE TABLE IF NOT EXISTS ...`) are defined within the `init_database` function in `app/services/database_service.py`. The `app/init_database.py` script is intended to trigger this initialization but currently imports from a non-existent file (`app.utils.database`).
+  - **Schema Definition**: The `calls` and `utterances` table schemas are defined within the `init_db` function in `app/utils/database.py`. The `app/init_database.py` script correctly calls this function for database initialization. The `calls` table includes `order_id` (TEXT) and `metadata` (JSONB) columns, which are used for storing order information.
   - **Database Interactions**: Handled by asynchronous functions within `app/services/database_service.py` (e.g., `save_call_start`, `save_call_end`, `save_utterance`, `get_call_details`, `get_call_utterances`).
-  - **Order Details**: The `save_order_details` function in `app/services/database_service.py` is currently a placeholder and does not implement database persistence for orders. Order processing logic resides mainly in `app/handlers/function_handler.py`.
-  - **API Access**: Endpoints for retrieving call and utterance data are defined in `app/api/endpoints.py` under the `db_router`.
+  - **Order Details**: The `save_order_details` function in `app/services/database_service.py` now persists order information. It stores a generated `order_id` and a JSON object containing order `items`, `total_price`, and `status` into the `metadata` column of the `calls` table, associated with the `call_sid`. The `get_call_details` function (and the corresponding API endpoint `/api/db/calls/{call_sid}`) has also been updated to retrieve and display this stored order information.
+  - **API Access**: Endpoints for retrieving call, utterance, and order data are defined in `app/api/endpoints.py` under the `db_router`.
 - **In-Memory Active Call Information**:
   - `active_call_info` dictionary in `app/api/websocket.py` stores temporary information about active calls (phone, language, call SID).
   - `active_handlers` dictionary in `app/api/websocket.py` stores references to active handler instances or related tasks.
   - This data is cleaned up when a WebSocket connection closes (`cleanup_call_data` function in `app/api/websocket.py`).
 - **Key Files**:
-  - `app/services/database_service.py`: Defines schema (within `init_database` function) and handles all database interactions.
-  - `app/api/endpoints.py`: Provides API endpoints (`db_router`) for accessing stored call/utterance data.
+  - `app/utils/database.py`: Defines the database schema (within the `init_db` function) and includes S3 upload logic.
+  - `app/services/database_service.py`: Handles all database interactions (CRUD operations for calls, utterances, orders).
+  - `app/init_database.py`: Script to initialize the database schema by calling `init_db` from `app/utils/database.py`.
+  - `app/api/endpoints.py`: Provides API endpoints (`db_router`) for accessing stored call, utterance, and order data.
 
-This architecture allows for distinct handling of Chinese and English calls, leveraging different STT/TTS services best suited for each language while using OpenAI GPT-4o as the core NLU for both.
+This architecture allows for distinct handling of Chinese and English calls for multiple restaurants, leveraging different STT/TTS services and NLU configurations tailored to each restaurant and language.

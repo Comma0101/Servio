@@ -44,13 +44,18 @@ class Settings(BaseSettings):
     TWILIO_PHONE_NUMBER: Optional[str] = None # Used for sending SMS
 
     # Database Configuration
-    DB_HOST: str = "localhost"
-    DB_PORT: int = 5432
-    DB_NAME: str = "servio"
-    DB_USER: str = "postgres"
-    DB_PASSWORD: str = "postgres"
-    # Construct DATABASE_URL for asyncpg pool
-    DATABASE_URL: str = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    DB_HOST: str
+    DB_PORT: int
+    DB_NAME: str
+    DB_USER: str
+    DB_PASSWORD: str
+    DATABASE_URL: Optional[str] = None
+    REDIS_HOST: Optional[str] = None
+
+    def __init__(self, **values: Any):
+        super().__init__(**values)
+        if self.DB_USER and self.DB_PASSWORD and self.DB_HOST and self.DB_PORT and self.DB_NAME:
+            self.DATABASE_URL = f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     # Square Configuration (Ensure these are in your .env)
     SQUARE_ACCESS_TOKEN: Optional[str] = None
@@ -71,8 +76,10 @@ class Settings(BaseSettings):
     RESTAURANT_MENU_JSON: str = DEFAULT_MENU_JSON # Store as JSON string
     RESTAURANT_OPENAI_TOOLS: List[Dict[str, Any]] = DEFAULT_OPENAI_TOOLS
     RESTAURANT_TAX_RATE: float = DEFAULT_TAX_RATE
+    CHINESE_WELCOME_MESSAGE: str = "您好！请问您今天想尝点什么呢？如果您不清楚我们的菜单，我们可以通过短信发给您,如果遇到延迟或者停顿是系统忙,正在处理订单，请您耐心等待。"
 
     # Other Configuration
+    PUBLIC_BASE_URL: Optional[str] = None
     FALLBACK_CALLER_ID: str = "+18005551234" # Moved hardcoded fallback here
     AUDIO_BUFFER_SIZE_MS: int = 20 # milliseconds per Twilio chunk
     AUDIO_SAMPLE_RATE: int = 8000 # Hz
