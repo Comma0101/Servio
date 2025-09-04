@@ -280,7 +280,7 @@ LIST_DISHES_BY_CATEGORY_TOOL_SCHEMA_CN_OPENAI: Dict[str, Any] = {
 
 ORDER_SUMMARY_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
     "name": "order_summary", # Keep name generic if logic is shared
-    "description": "Provides a structured summary of the customer's order for backend processing. Use 'IN PROGRESS' for partial orders and 'DONE' when the order is complete and confirmed by the customer.",
+    "description": "Use this function to summarize the entire order once the customer has explicitly finished ordering. Do not use this function to confirm a single item. Wait for the user to say 'that's all' or 'I'm done' before calling this function with a 'DONE' status.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -292,10 +292,13 @@ ORDER_SUMMARY_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
                     "properties": {
                         "name": {"type": "string", "description": "Name of the item (should be English if from English interaction)."},
                         "quantity": {"type": "integer", "description": "Quantity of the item."},
-                        "variation": {"type": ["string", "null"], "description": "Selected variation of the item (English, if applicable)."}
-                        # TODO: Consider if optionGroups structure from CN version is needed for EN
+                        "options": {
+                            "type": "object",
+                            "description": "A dictionary of selected options for the item, especially for combos. For example: {'seafood': 'Shrimp', 'size': '1lb', 'flavor': 'Garlic Butter'}",
+                            "nullable": True
+                        }
                     },
-                    "required": ["name", "quantity"]
+                    "required": ["name", "quantity", "options"]
                 }
             },
             "total_price": {
@@ -314,7 +317,7 @@ ORDER_SUMMARY_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
 
 CHECK_MENU_ITEM_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
     "name": "check_menu_item_english",
-    "description": "Verifies if a specific dish mentioned by the customer (in English) is available on the menu.",
+    "description": "Verifies if a specific dish mentioned by the customer (in English) is available on the menu. Use this for all items, including fixed-price combos like 'COMBO #1'.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -379,6 +382,46 @@ SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
         "type": "object",
         "properties": {},
         "required": [],
+    }
+}
+
+START_COMBO_ORDER_TOOL_SCHEMA: Dict[str, Any] = {
+    "name": "start_combo_order",
+    "description": "Use this tool for any combo order, including 'Customized Combo' and fixed-price combos like 'COMBO #1'. It initiates a guided process to gather all necessary choices from the user.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "dish_name": {
+                "type": "string",
+                "description": "The name of the combo dish the user wants to order."
+            }
+        },
+        "required": ["dish_name"]
+    }
+}
+
+PROCESS_COMBO_SELECTION_TOOL_SCHEMA: Dict[str, Any] = {
+    "name": "process_combo_selection",
+    "description": "Processes any user response during a combo order step. Use this for protein selections (e.g., 'shrimp'), affirmations (e.g., 'yes'), or negations (e.g., 'no, that's it').",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "user_input": {
+                "type": "string",
+                "description": "The user's complete, verbatim response to the current combo question."
+            }
+        },
+        "required": ["user_input"]
+    }
+}
+
+LIST_PROTEIN_OPTIONS_TOOL_SCHEMA: Dict[str, Any] = {
+    "name": "list_protein_options_for_combo",
+    "description": "Lists the available protein options for a combo order when the user asks for them.",
+    "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
     }
 }
 
@@ -506,4 +549,44 @@ DISHES_ALIASES_CN: Dict[str, List[str]] = {
     "珍珠": ["Boba", "Boba (TG)", "Crystal Boba", "Crystal Boba (TG)"],
     "布丁": ["Pudding", "Pudding (TG)"],
     "荔枝椰果": ["Lychee Jelly", "Lychee Jelly (TG)"],
+}
+
+DISHES_ALIASES_EN: Dict[str, List[str]] = {
+    "shrimp": [
+        "1lb.shrimp head on",
+        "1lb.headless shrimp",
+        "1lb Peeled Tail On",
+        "half a pound (shrimp head on)",
+        "half a pound (headless shrimp)",
+        "half a pound Peeled Tail on"
+    ],
+    "crawfish": [
+        "1lb.fresh crawfish",
+        "1lb.Frz crawfish",
+        "1 lb crawfish",
+        "half pound of fresh crawfish",
+        "half a pound 0.5 frz crawfish"
+    ],
+    "lobster": [
+        "1(pc).Lobster Tail"
+    ],
+    "crab": [
+        "1lb. King Crab Legs 1corn 1 order pot",
+        "1lb.Snow Crab Legs",
+        "1lb Dungeness Legs"
+    ],
+    "mussels": [
+        "1lb. Black Mussels",
+        "1lb.Green Mussels",
+        "half a pound (black mussels)",
+        "half a pound (green mussels)"
+    ],
+    "clams": [
+        "1lb. Clams",
+        "half a pound (clams)"
+    ],
+    "scallop": [
+        "1lb. Scallop",
+        "half a pound (scallop)"
+    ]
 }

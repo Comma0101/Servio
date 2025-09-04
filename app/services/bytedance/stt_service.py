@@ -43,9 +43,22 @@ class BytedanceSTTService:
         
         self.websocket: Optional[WebSocketClientProtocol] = None
         self._receive_task: Optional[asyncio.Task] = None
-        self._transcript_queue: asyncio.Queue[Tuple[str, bool]] = asyncio.Queue()
+        self._transcript_queue: asyncio.Queue[Tuple[str, bool, Optional[float]]] = asyncio.Queue()
         self._is_closed = asyncio.Event()
+        self._is_paused = asyncio.Event() # New: Event to control audio sending
         self._turn_start_time: Optional[float] = None
+
+    def pause(self) -> None:
+        """Pauses sending audio to the STT service."""
+        if not self._is_paused.is_set():
+            logger.info(f"STT Service ({self.call_sid}): Pausing audio stream.")
+            self._is_paused.set()
+
+    def resume(self) -> None:
+        """Resumes sending audio to the STT service."""
+        if self._is_paused.is_set():
+            logger.info(f"STT Service ({self.call_sid}): Resuming audio stream.")
+            self._is_paused.clear()
 
     async def connect(self) -> None:
         """Establishes the WebSocket connection and initializes the STT stream."""
@@ -91,6 +104,10 @@ class BytedanceSTTService:
 
     async def send_audio(self, audio_chunk: bytes, is_last_chunk: bool = False) -> None:
         """Sends an audio chunk to the STT service."""
+        if self._is_paused.is_set():
+            # logger.debug(f"STT Service ({self.call_sid}): Audio sending is paused. Discarding chunk.")
+            return
+            
         if not self.websocket or not self.websocket.open:
             logger.warning(f"STT Service ({self.call_sid}): Cannot send audio, WebSocket is not open.")
             return
@@ -142,7 +159,14 @@ class BytedanceSTTService:
                     server_msg_flags = header_bytes[1] & 0x0F
                     is_final = (server_msg_flags & 0x02) != 0
                     
-                    await self._transcript_queue.put((transcript, is_final))
+                    latency = None
+                    if self._turn_start_time:
+                        latency = time.perf_counter() - self._turn_start_time
+
+                    await self._transcript_queue.put((transcript, is_final, latency))
+
+                    if is_final:
+                        self._turn_start_time = None # Reset for the next turn
 
                 elif msg_type == 0b1111:  # Error message
                     error_code = struct.unpack('>I', raw_message[4:8])[0]
@@ -161,25 +185,19 @@ class BytedanceSTTService:
             logger.info(f"STT Service ({self.call_sid}): Exiting message handler.")
             self._is_closed.set()
             # Put a sentinel value to unblock the generator
-            await self._transcript_queue.put(("", True))
+            await self._transcript_queue.put(("", True, None))
 
     async def transcripts(self) -> AsyncGenerator[Tuple[str, bool, Optional[float]], None]:
         """Yields transcripts and latency as they become available."""
         while not self._is_closed.is_set():
             try:
-                transcript, is_final = await asyncio.wait_for(self._transcript_queue.get(), timeout=1.0)
-                
-                latency = None
-                if self._turn_start_time:
-                    latency = time.perf_counter() - self._turn_start_time
+                transcript, is_final, latency = await asyncio.wait_for(self._transcript_queue.get(), timeout=1.0)
                 
                 if transcript:
                     yield transcript, is_final, latency
 
-                if is_final:
-                    self._turn_start_time = None # Reset for the next turn
-                    if not transcript: # Sentinel value
-                        break
+                if is_final and not transcript: # Sentinel value
+                    break
             except asyncio.TimeoutError:
                 continue
             except asyncio.CancelledError:

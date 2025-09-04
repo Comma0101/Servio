@@ -5,6 +5,7 @@ import asyncio
 import base64
 import json
 import logging
+import functools
 from fastapi import WebSocket
 from typing import Optional, Dict, Any
 import traceback
@@ -12,10 +13,24 @@ import time
 import uuid
 
 from app.services.deepgram_service import DeepgramService
+from app.utils.twilio import redirect_call
+from app.config import settings
 from app.handlers.english_tool_logic import FINAL_AUDIO_MARK_NAME
 from app.utils.twilio import end_call
 from app.services.call_state_service import remove_call_state
 from starlette.websockets import WebSocketState
+from app.handlers.english_tool_logic import clean_text_for_tts
+from app.handlers.common_tool_defs import (
+    ORDER_SUMMARY_TOOL_SCHEMA_EN_OPENAI,
+    CHECK_MENU_ITEM_TOOL_SCHEMA_EN_OPENAI,
+    LIST_DISHES_BY_CATEGORY_TOOL_SCHEMA_EN_OPENAI,
+    RECOMMEND_DISHES_TOOL_SCHEMA_EN_OPENAI,
+    GET_RANDOM_MENU_CATEGORIES_TOOL_SCHEMA_EN_OPENAI,
+    SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI,
+    START_COMBO_ORDER_TOOL_SCHEMA,
+    PROCESS_COMBO_SELECTION_TOOL_SCHEMA,
+    LIST_PROTEIN_OPTIONS_TOOL_SCHEMA
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -43,7 +58,17 @@ class DeepgramEnglishAudioHandler():
         
         # Store configuration for future language switching
         self.system_message = system_message # Will be populated with LIMF default if None in _update_deepgram_language
-        self.function_definitions = function_definitions or []
+        self.function_definitions = function_definitions or [
+            ORDER_SUMMARY_TOOL_SCHEMA_EN_OPENAI,
+            CHECK_MENU_ITEM_TOOL_SCHEMA_EN_OPENAI,
+            LIST_DISHES_BY_CATEGORY_TOOL_SCHEMA_EN_OPENAI,
+            RECOMMEND_DISHES_TOOL_SCHEMA_EN_OPENAI,
+            GET_RANDOM_MENU_CATEGORIES_TOOL_SCHEMA_EN_OPENAI,
+            SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI,
+            START_COMBO_ORDER_TOOL_SCHEMA,
+            PROCESS_COMBO_SELECTION_TOOL_SCHEMA,
+            LIST_PROTEIN_OPTIONS_TOOL_SCHEMA
+        ]
         
         # Initialize caller information
         self.stream_sid = None
@@ -161,6 +186,18 @@ class DeepgramEnglishAudioHandler():
             # The initial language selection is final.
             # We can keep logging the DTMF or add other DTMF-based actions here if needed in the future.
             logger.info(f"DTMF digit {digit} received. In-call language switching is disabled.")
+
+            if digit == "0":
+                logger.info(f"Human handoff requested for call {self.call_sid}.")
+
+                handoff_url = f"{settings.PUBLIC_BASE_URL}/api/v1/human-handoff-twiml"
+                
+                # Redirect the call to the new TwiML endpoint
+                await asyncio.get_event_loop().run_in_executor(None, functools.partial(redirect_call, self.call_sid, handoff_url))
+                
+                # Clean up the handler
+                await self._handle_stop_event({"event": "stop"})
+                return
             
         except Exception as e:
             logger.error(f"Error handling DTMF event: {e}")
@@ -460,7 +497,11 @@ class DeepgramEnglishAudioHandler():
             # Process the actual content of AgentResponse / ConversationText
             response_text = message.get("content", "") # Use "content" for ConversationText
             if response_text:
+                response_text = clean_text_for_tts(response_text)
                 logger.info(f"AGENT RESPONSE (ConversationText): {response_text}")
+                if "goodbye" in response_text.lower():
+                    if self.deepgram_service:
+                        self.deepgram_service.is_final_confirmation_sent = True
                 # Metadata handling might be different for ConversationText vs AgentResponse
                 # For now, just save the utterance
                 if self.call_sid:
@@ -504,7 +545,7 @@ class DeepgramEnglishAudioHandler():
                 self.agent_is_speaking = False
                 logger.info(f"Agent finished speaking (AgentAudioDone). Call SID: {self.call_sid}")
             
-            if self.is_final_confirmation:
+            if self.deepgram_service and self.deepgram_service.is_final_confirmation_sent:
                 logger.info(f"Final confirmation audio finished. Sending hangup mark to Twilio.")
                 if self.websocket and self.stream_sid and self.websocket.client_state == WebSocketState.CONNECTED:
                     mark_message = {
@@ -518,7 +559,7 @@ class DeepgramEnglishAudioHandler():
                     logger.info(f"Sent final hangup mark: {FINAL_HANGUP_MARK_NAME}")
                 else:
                     logger.error("Cannot send hangup mark: WebSocket is not connected or stream_sid is missing.")
-                self.is_final_confirmation = False # Reset flag
+                self.deepgram_service.is_final_confirmation_sent = False # Reset flag
 
         elif message_type == "Cleared":
             logger.info(f"Received 'Cleared' acknowledgement from Deepgram. Call SID: {self.call_sid}")
@@ -653,7 +694,7 @@ class DeepgramEnglishAudioHandler():
             logger.info(f"Language for welcome message: {self.language}")
             
             # English welcome message
-            welcome_message = f"Welcome to {restaurant_name}. Are you ready to order, or would you like me to text you a link to our menu first?"
+            welcome_message = settings.ENGLISH_WELCOME_MESSAGE.format(restaurant_name=restaurant_name)
             logger.info(f"Using English welcome message: {welcome_message}")
             
             # Send welcome message

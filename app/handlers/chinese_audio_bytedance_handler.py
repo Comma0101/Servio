@@ -14,6 +14,8 @@ import audioop
 from fastapi import WebSocket, WebSocketDisconnect # type: ignore
 import websockets # For Bytedance WebSocket client connections
 from thefuzz import process as fuzz_process, fuzz # For fuzzy string matching
+from twilio.twiml.voice_response import VoiceResponse
+from app.constants import HUMAN_AGENT_PHONE_NUMBER
 
 from app.core.barge_in import BargeInController, BargeInState, TelephonyAdapter, TTSAdapter
 from app.services.bytedance.stt_service import BytedanceSTTService
@@ -29,7 +31,7 @@ from app.handlers.common_tool_defs import (
     DISHES_ALIASES_CN
 )
 from app.services.database_service import save_order_details, save_call_start, save_call_end, save_utterance
-from app.utils.twilio import send_sms, end_call
+from app.utils.twilio import send_sms, end_call, create_outbound_call, redirect_call
 from app.utils.database import upload_audio_to_s3
 from app.utils.constants import get_restaurant_config
 from app.constants import THIRTY_NINE_MILES_PORTAL_ID_TAKEOUT, THIRTY_NINE_MILES_PORTAL_ID_DINE_IN
@@ -44,6 +46,7 @@ from app.utils.thirty_nine_miles import (
     LangCode
 )
 from app.handlers.chinese_tool_logic import execute_tool_logic
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -155,38 +158,45 @@ class ChineseAudioByteDanceHandler(TelephonyAdapter, TTSAdapter):
         # Inform the barge-in controller that TTS is starting
         await self.barge_controller.on_tts_audio_start(req_id)
         
+        # Pause STT service before speaking
+        self.stt_service.pause()
+        
         first_chunk = True
-        async for audio_chunk_mulaw in audio_generator:
-            if first_chunk and latency_tracker and end_of_speech_time:
-                first_chunk = False
-                # This is the moment the user hears the first sound.
-                total_response_latency_ms = (time.perf_counter() - end_of_speech_time) * 1000
+        try:
+            async for audio_chunk_mulaw in audio_generator:
+                if first_chunk and latency_tracker and end_of_speech_time:
+                    first_chunk = False
+                    # This is the moment the user hears the first sound.
+                    total_response_latency_ms = (time.perf_counter() - end_of_speech_time) * 1000
 
-                # Keep old calculation for breakdown details
-                ttfa_ms = (time.perf_counter() - latency_tracker['tts_request_time']) * 1000
-                latency_tracker['tts_ttfa'] = ttfa_ms
-                stt_latency = latency_tracker.get('stt', 0) * 1000
-                nlu_latency = latency_tracker.get('total_nlu_turn', 0) * 1000
+                    # Keep old calculation for breakdown details
+                    ttfa_ms = (time.perf_counter() - latency_tracker['tts_request_time']) * 1000
+                    latency_tracker['tts_ttfa'] = ttfa_ms
+                    stt_latency = latency_tracker.get('stt', 0) * 1000
+                    nlu_latency = latency_tracker.get('total_nlu_turn', 0) * 1000
 
-                # Log the final, consolidated latency metric.
-                logger.info(
-                    f"RESPONSE_LATENCY CallSid: {self.call_sid}, Transcript: '{transcript}', "
-                    f"TotalLatency: {total_response_latency_ms:.2f} ms, "
-                    f"Breakdown: {{'stt': {stt_latency:.2f}, 'nlu': {nlu_latency:.2f}, 'tts_ttfa': {ttfa_ms:.2f}}}"
-                )
+                    # Log the final, consolidated latency metric.
+                    logger.info(
+                        f"RESPONSE_LATENCY CallSid: {self.call_sid}, Transcript: '{transcript}', "
+                        f"TotalLatency: {total_response_latency_ms:.2f} ms, "
+                        f"Breakdown: {{'stt': {stt_latency:.2f}, 'nlu': {nlu_latency:.2f}, 'tts_ttfa': {ttfa_ms:.2f}}}"
+                    )
 
-            if self._stop_event_handled or self.tts_service.tts_interrupt_event.is_set():
-                logger.info(f"Handler: TTS for reqid {req_id} was interrupted or stopped.")
-                break
-            
-            self.complete_audio_buffer.extend(audio_chunk_mulaw)
-            if self.twilio_ws and self.stream_sid:
-                payload = base64.b64encode(audio_chunk_mulaw).decode('utf-8')
-                await self.twilio_ws.send_text(json.dumps({
-                    "event": "media",
-                    "streamSid": self.stream_sid,
-                    "media": {"payload": payload, "track": "outbound"}
-                }))
+                if self._stop_event_handled or self.tts_service.tts_interrupt_event.is_set():
+                    logger.info(f"Handler: TTS for reqid {req_id} was interrupted or stopped.")
+                    break
+                
+                self.complete_audio_buffer.extend(audio_chunk_mulaw)
+                if self.twilio_ws and self.stream_sid:
+                    payload = base64.b64encode(audio_chunk_mulaw).decode('utf-8')
+                    await self.twilio_ws.send_text(json.dumps({
+                        "event": "media",
+                        "streamSid": self.stream_sid,
+                        "media": {"payload": payload, "track": "outbound"}
+                    }))
+        finally:
+            # Resume STT service after speaking
+            self.stt_service.resume()
 
         logger.info(f"Handler: Finished speaking TTS for reqid {req_id}.")
         await self.barge_controller.on_tts_audio_end(req_id)
@@ -212,26 +222,26 @@ class ChineseAudioByteDanceHandler(TelephonyAdapter, TTSAdapter):
         if self._stop_event_handled or not normalized_transcript:
             return
 
-        # Barge-in must be checked BEFORE the lock to prevent deadlocks.
-        current_barge_in_state = self.barge_controller.get_current_state()
-        if current_barge_in_state in (BargeInState.TTS_PLAY, BargeInState.WAIT_MARK):
-            logger.info(f"Handler: Barge-in detected on transcript in state {current_barge_in_state.name}. Interrupting TTS.")
-            await self.barge_controller.speech_detected()
-
-            # Cancel any pending commit timer to prevent it from firing after the barge-in.
-            if self.nlu_commit_task and not self.nlu_commit_task.done():
-                logger.info("Cancelling pending NLU commit timer due to barge-in.")
-                self.nlu_commit_task.cancel()
-            
-            # Pop the interrupted assistant message from history to prevent re-responding.
-            if self.history and self.history[-1].get("role") == "assistant":
-                interrupted_msg = self.history.pop()
-                logger.info(f"Popped interrupted assistant message from history: {interrupted_msg.get('content', '')[:50]}...")
-
-
         async with self.stt_processing_lock:
             if self._stop_event_handled:
                 return
+
+            # Barge-in check moved inside the lock to prevent race conditions.
+            # The following block is commented out to disable barge-in for the Chinese handler.
+            # current_barge_in_state = self.barge_controller.get_current_state()
+            # if current_barge_in_state in (BargeInState.TTS_PLAY, BargeInState.WAIT_MARK):
+            #     logger.info(f"Handler: Barge-in detected on transcript in state {current_barge_in_state.name}. Interrupting TTS.")
+            #     await self.barge_controller.speech_detected()
+
+            #     # Cancel any pending commit timer to prevent it from firing after the barge-in.
+            #     if self.nlu_commit_task and not self.nlu_commit_task.done():
+            #         logger.info("Cancelling pending NLU commit timer due to barge-in.")
+            #         self.nlu_commit_task.cancel()
+                
+            #     # Pop the interrupted assistant message from history to prevent re-responding.
+            #     if self.history and self.history[-1].get("role") == "assistant":
+            #         interrupted_msg = self.history.pop()
+            #         logger.info(f"Popped interrupted assistant message from history: {interrupted_msg.get('content', '')[:50]}...")
 
             # Preserve deduplication logic
             fully_normalized_current = self._normalize_text_for_deduplication(normalized_transcript)
@@ -251,9 +261,10 @@ class ChineseAudioByteDanceHandler(TelephonyAdapter, TTSAdapter):
             latency_tracker.update(nlu_latency)
 
             # Re-check barge-in state after the NLU call to prevent "zombie" responses
-            if self.barge_controller.get_current_state() != BargeInState.IDLE:
-                logger.warning(f"Handler: Barge-in detected after NLU response. Discarding response for '{normalized_transcript}'")
-                return
+            # The following block is commented out to disable barge-in for the Chinese handler.
+            # if self.barge_controller.get_current_state() != BargeInState.IDLE:
+            #     logger.warning(f"Handler: Barge-in detected after NLU response. Discarding response for '{normalized_transcript}'")
+            #     return
             
             if response_text:
                 await save_utterance(self.call_sid, "agent", response_text)
@@ -373,6 +384,20 @@ class ChineseAudioByteDanceHandler(TelephonyAdapter, TTSAdapter):
                         self.history.append({"role": "assistant", "content": welcome_text})
                     # Use the new speak method
                     await self._speak(welcome_text)
+
+            elif event_type == "dtmf":
+                digit = event_data.get("dtmf", {}).get("digit")
+                if digit == "0":
+                    logger.info(f"Human handoff requested for call {self.call_sid}.")
+
+                    handoff_url = f"{settings.PUBLIC_BASE_URL}/api/v1/human-handoff-twiml"
+                    
+                    # Redirect the call to the new TwiML endpoint
+                    await self.loop.run_in_executor(None, functools.partial(redirect_call, self.call_sid, handoff_url))
+                    
+                    # Clean up the handler
+                    await self.cleanup()
+                    return
 
             elif event_type == "media":
                 media_payload_b64 = event_data.get("media", {}).get("payload")

@@ -12,6 +12,9 @@ flask_session/
 
 # Environment variables
 .env
+app/servio.env
+g9mph.log
+pod_logs_latest.txt
 
 # IDE files
 .vscode/
@@ -23,4 +26,3 @@ Thumbs.db
 
 # Sensitive credential files
 app/parabolic-wall-459005-u5-55f740733ce9.json
-

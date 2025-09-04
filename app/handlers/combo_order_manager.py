@@ -1,0 +1,775 @@
+import logging
+from typing import Dict, Any, Optional, List
+import json
+import re
+from thefuzz import process
+
+logger = logging.getLogger(__name__)
+
+class ComboOrderManager:
+    def __init__(self):
+        self.active_orders: Dict[str, Dict[str, Any]] = {}
+        self.completed_combos: Dict[str, Dict[str, Any]] = {}
+        with open('app/utils/testing_menu.json', 'r') as f:
+            self.menu_data = json.load(f)
+
+    def add_completed_combo(self, call_sid: str, order: Dict[str, Any]):
+        self.completed_combos[call_sid] = order
+
+    def get_completed_combo(self, call_sid: str) -> Optional[Dict[str, Any]]:
+        return self.completed_combos.get(call_sid)
+
+    def is_active(self, call_sid: str) -> bool:
+        """Check if a combo order is currently active for a given call_sid."""
+        return call_sid in self.active_orders
+
+    def _get_dish_by_name(self, dish_name: str) -> Optional[Dict[str, Any]]:
+        for item in self.menu_data.get("items", []):
+            if item.get("name", {}).get("en", "").lower() == dish_name.lower():
+                return item
+        return None
+
+    def start_combo_order(self, dish_name: str, call_sid: str) -> Dict[str, Any]:
+        dish_details = self._get_dish_by_name(dish_name)
+        if not dish_details:
+            return {"message_for_agent": f"Sorry, I couldn't find {dish_name} on the menu."}
+
+        self.active_orders[call_sid] = {
+            "dish_name": dish_name,
+            "dish_details": dish_details,
+            "current_step": 0,
+            "selections": {},
+            "state": "STARTED"
+        }
+
+        if "customized combo" in dish_name.lower():
+            self.active_orders[call_sid]["selections"]["proteins"] = []
+            self.active_orders[call_sid]["state"] = "AWAITING_PROTEIN_CHOICE"
+            return {
+                "status": "PROMPT_FOR_PROTEIN",
+                "message_for_agent": "The Customized Combo is a great choice! What protein would you like to add? Popular choices include Shrimp, Mussels, and Crab Legs. You can pick one of those, name another choice, or just say 'send the menu' and I'll text it to you."
+            }
+        else:
+            self.active_orders[call_sid]["selections"]["fixed_combo_selections"] = []
+            self.active_orders[call_sid]["state"] = "AWAITING_OPTION_CHOICE"
+            return self.get_next_question(call_sid)
+
+    def process_selection(self, user_input: str, call_sid: str) -> Dict[str, Any]:
+        if call_sid not in self.active_orders:
+            return {"message_for_agent": "Sorry, I don't have an active combo order for you. Let's start over."}
+
+        order = self.active_orders[call_sid]
+        
+        if order["state"] == "AWAITING_PROTEIN_CHOICE":
+            return self._handle_protein_selection(user_input, order, call_sid)
+        elif order["state"] == "AWAITING_PROTEIN_CLARIFICATION":
+            return self._handle_protein_clarification(user_input, order, call_sid)
+        elif order["state"] == "AWAITING_SIZE_CHOICE":
+            return self._handle_size_selection(user_input, order, call_sid)
+        elif order["state"] == "AWAITING_OPTION_CHOICE":
+            return self._handle_option_selection(user_input, order, call_sid)
+        elif order["state"] == "AWAITING_OPTIONAL_CHOICE_CONFIRMATION":
+            return self._handle_optional_choice_confirmation(user_input, order, call_sid)
+        elif order["state"] == "AWAITING_INFO_DELIVERY_CHOICE":
+            return self._handle_info_delivery_choice(user_input, order, call_sid)
+        elif order["state"] == "AWAITING_FINAL_CONFIRMATION":
+            return self._finalize_combo_and_prepare_for_cart(user_input, order, call_sid)
+        elif order["state"] == "AWAITING_MORE_PROTEINS":
+            return self._handle_more_proteins(user_input, order, call_sid)
+        elif order["state"] == "AWAITING_UPDATE":
+            return self.update_combo_selection(user_input, order, call_sid)
+        else:
+            return {"status": "ERROR", "message_for_agent": "Invalid order state."}
+
+    def _clean_protein_name(self, original_name: str) -> str:
+        # This regex now handles "1lb", "half a pound", "half pound of", and similar variations.
+        cleaned = re.sub(r'^(1\s?lb\.?|half(\s+a)?\s+pound(\s+of)?)\s*\(?', '', original_name, flags=re.IGNORECASE).strip()
+        if cleaned.endswith(')'):
+            cleaned = cleaned[:-1].strip()
+        return cleaned
+
+    def _clean_option_name_for_tts(self, original_name: str) -> str:
+        """Removes prefixes like '1 lb.' for cleaner TTS prompts."""
+        if not original_name:
+            return ""
+        # This regex removes variations of "1 lb" and similar patterns from the start of the string.
+        cleaned = re.sub(r'^\d+(\s?\(pc\))?\.?\s?(lb|ib|in)\.?\s*', '', original_name, flags=re.IGNORECASE).strip()
+        return cleaned
+
+    def user_requests_options(self, user_input: str) -> bool:
+        """Check if the user is asking for a list of options."""
+        # Expanded list of keywords and phrases
+        request_phrases = [
+            "option", "choices", "what do you have", "what are the",
+            "tell me the", "list the", "can you read me", "read the"
+        ]
+        return any(phrase in user_input.lower() for phrase in request_phrases)
+
+    def _handle_protein_selection(self, user_input: str, order: Dict[str, Any], call_sid: str) -> Dict[str, Any]:
+        if self.user_requests_options(user_input):
+            order["state"] = "AWAITING_INFO_DELIVERY_CHOICE"
+            return {
+                "action": "PROMPT_FOR_INFO_DELIVERY",
+                "message_for_agent": "I can send the full list of protein options to your phone via SMS, or I can read them out to you. What would you prefer?"
+            }
+
+        protein_selection = user_input
+        matches = self._get_protein_availability(protein_selection, order["dish_details"])
+        
+        if not matches:
+            return {"action": "INVALID_SELECTION", "message_for_agent": f"My apologies, it looks like {protein_selection} isn't an option for this combo. Would you like me to list the available choices?"}
+
+        # If the user's input was a general category (like "crawfish") and we have multiple variations.
+        is_general_category = self._get_protein_availability(protein_selection, order["dish_details"], check_category=True)
+        if len(matches) > 1 and is_general_category:
+            order["state"] = "AWAITING_PROTEIN_CLARIFICATION"
+            order["ambiguous_selections"] = matches
+            # The 'name' field now correctly represents the variation, e.g., "fresh crawfish"
+            options_text = ", ".join([match["name"] for match in matches])
+            return {"action": "PROMPT_FOR_CLARIFICATION", "message_for_agent": f"We have a few options for {protein_selection}: {options_text}. Which one would you like?"}
+
+        # If only one match, or if the user was specific enough to narrow it down to one.
+        matched_protein = matches[0]
+        order["selections"]["proteins"].append({"name": matched_protein["name"]})
+        
+        # Always prompt for size after protein selection.
+        order["state"] = "AWAITING_SIZE_CHOICE"
+        
+        can_be_half_pound = matched_protein.get("half_pound", False)
+        if can_be_half_pound:
+            message = f"Great choice! And how many pounds of {matched_protein['name']} would you like? You can order in half-pound increments."
+        else:
+            message = f"Great choice! And how many pounds of {matched_protein['name']} would you like? It's available in whole pound increments."
+
+        return {"action": "PROMPT_FOR_SIZE", "message_for_agent": message}
+
+    def _handle_protein_clarification(self, user_input: str, order: Dict[str, Any], call_sid: str) -> Dict[str, Any]:
+        """Handles user's choice from a list of ambiguous protein options."""
+        ambiguous_options = order.get("ambiguous_selections", [])
+        if not ambiguous_options:
+            return {"action": "ERROR", "message_for_agent": "Sorry, something went wrong. Let's try that again."}
+
+        option_names = [opt["name"] for opt in ambiguous_options]
+        best_match, score = process.extractOne(user_input, option_names)
+
+        if score < 70:
+            options_text = ", ".join(option_names)
+            return {"action": "CLARIFICATION_FAILED", "message_for_agent": f"I'm sorry, I didn't catch that. Please choose from: {options_text}."}
+
+        # Find the full details of the chosen option
+        chosen_protein = next((opt for opt in ambiguous_options if opt["name"] == best_match), None)
+        
+        if not chosen_protein:
+             return {"action": "ERROR", "message_for_agent": "Sorry, an unexpected error occurred. Let's restart the combo."}
+
+        order["selections"]["proteins"].append({"name": chosen_protein["name"]})
+        order.pop("ambiguous_selections", None) # Clean up
+
+        # Always prompt for size after protein clarification.
+        order["state"] = "AWAITING_SIZE_CHOICE"
+        
+        can_be_half_pound = chosen_protein.get("half_pound", False)
+        if can_be_half_pound:
+            message = f"Great choice! And how many pounds of {chosen_protein['name']} would you like? You can order in half-pound increments."
+        else:
+            message = f"Great choice! And how many pounds of {chosen_protein['name']} would you like? It's available in whole pound increments."
+            
+        return {"action": "PROMPT_FOR_SIZE", "message_for_agent": message}
+
+    def _parse_numeric_input(self, user_input: str) -> Optional[float]:
+        """
+        Parses numeric values from spoken language, handling digits, decimals, and a range of number words.
+        Returns a float if a valid number is found, otherwise None.
+        """
+        user_input_lower = user_input.lower().strip()
+        
+        number_words = {
+            'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+            'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10
+        }
+
+        def parse_token(token: str) -> Optional[float]:
+            token = token.strip()
+            if token in number_words:
+                return float(number_words[token])
+            try:
+                return float(token)
+            except ValueError:
+                return None
+
+        # Case 1: "X point Y"
+        if 'point' in user_input_lower:
+            parts = user_input_lower.split('point')
+            if len(parts) == 2 and parts[0].strip() and parts[1].strip():
+                integer_part = parse_token(parts[0])
+                # Take only the first word after "point" as the decimal part
+                decimal_token = parts[1].strip().split()[0]
+                decimal_part = parse_token(decimal_token)
+                
+                if integer_part is not None and decimal_part is not None:
+                    return integer_part + (decimal_part / 10.0)
+
+        # Case 2: "X and a half"
+        if 'and a half' in user_input_lower:
+            parts = user_input_lower.split('and a half')
+            if parts[0].strip():
+                integer_part = parse_token(parts[0])
+                if integer_part is not None:
+                    return integer_part + 0.5
+        
+        # Case 3: Standalone "half"
+        if user_input_lower == "half" or user_input_lower == "half a pound":
+            return 0.5
+
+        # Case 4: Simple number words (e.g., "seven", "seven pounds")
+        words = user_input_lower.split()
+        if words and words[0] in number_words:
+            return float(number_words[words[0]])
+
+        # Case 5: Fallback to regex for digits
+        match = re.search(r'(\d+\.?\d*)', user_input_lower)
+        if match:
+            try:
+                return float(match.group(1))
+            except ValueError:
+                return None
+                
+        return None
+
+    def _handle_size_selection(self, user_input: str, order: Dict[str, Any], call_sid: str) -> Dict[str, Any]:
+        quantity = self._parse_numeric_input(user_input)
+
+        if quantity is None:
+            return {
+                "action": "reprompt",
+                "message_for_agent": "I'm sorry, I didn't quite catch that. How many pounds would you like?"
+            }
+
+        last_protein = order["selections"]["proteins"][-1]
+        protein_details = self._get_protein_availability(last_protein['name'], order['dish_details'])[0]
+
+        # Validation based on protein availability
+        can_be_half_pound = protein_details.get("half_pound", False)
+        if not can_be_half_pound and quantity % 1 != 0:
+            return {
+                "action": "reprompt",
+                "message_for_agent": f"My apologies, {last_protein['name']} is only available in whole pound increments. How many pounds would you like?"
+            }
+        
+        # If an item can be a half pound, it can be any multiple of 0.5.
+        # This logic is now correct.
+        if can_be_half_pound and (quantity * 2) % 1 != 0:
+             return {
+                "action": "reprompt",
+                "message_for_agent": f"My apologies, {last_protein['name']} can only be ordered in half-pound or whole-pound increments. Please provide a valid weight."
+            }
+
+        # Format the size string for the summary
+        if quantity == int(quantity):
+            quantity = int(quantity)
+        size_str = f"{quantity} lbs" if quantity != 1 else "1 lb"
+        
+        last_protein["size"] = size_str
+        
+        order["state"] = "AWAITING_MORE_PROTEINS"
+        return {
+            "action": "PROMPT_FOR_MORE_PROTEINS",
+            "message_for_agent": f"I've added {size_str} of {last_protein['name']}. Would you like to add another protein?"
+        }
+
+    def _handle_option_selection(self, user_input: str, order: Dict[str, Any], call_sid: str) -> Dict[str, Any]:
+        """Handles selection for generic options like flavor, spice, extras."""
+        option_groups = order["dish_details"].get("optionGroups", [])
+        
+        current_group_index = order["current_step"] - 1
+        if current_group_index < 0 or current_group_index >= len(option_groups):
+            return {"status": "ERROR", "message_for_agent": "Something went wrong with the order steps."}
+        
+        current_group = option_groups[current_group_index]
+        group_name = current_group.get("name", {}).get("en")
+        
+        # If the group is optional, the user might say "no" or "skip"
+        if not current_group.get("isRequired", True):
+            if any(word in user_input.lower() for word in ["no", "skip", "none", "don't want"]):
+                # Just move to the next question without making a selection
+                order["current_step"] += 1
+                return self.get_next_question(call_sid)
+
+        # Custom logic to handle menu inconsistencies
+        cleaned_input = user_input
+        if "sausage" in user_input.lower():
+            cleaned_input = user_input.lower().replace("sausage", "sausges")
+
+        options = [opt.get("name", {}).get("en") for opt in current_group.get("options", [])]
+        best_match, score = process.extractOne(cleaned_input, options)
+        
+        if score < 80:
+            options_str = ", ".join(options)
+            return {
+                "action": "reprompt",
+                "message_for_agent": f"I'm sorry, I didn't understand that. For {group_name}, your options are: {options_str}. Which would you like?"
+            }
+        
+        if "customized combo" not in order["dish_name"].lower():
+            # More robust check for protein selections in fixed combos
+            is_protein_selection = "choose one" in group_name.lower() and "free" not in group_name.lower()
+            if is_protein_selection:
+                protein_keywords = ["shrimp", "crawfish", "mussels", "clams", "crab", "lobster", "scallop"]
+                if any(keyword in best_match.lower() for keyword in protein_keywords):
+                    order["selections"]["fixed_combo_selections"].append(best_match)
+                else:
+                    order["selections"][group_name] = best_match
+            else:
+                order["selections"][group_name] = best_match
+        else:
+            order["selections"][group_name] = best_match
+
+        return self.get_next_question(call_sid)
+
+    def _handle_optional_choice_confirmation(self, user_input: str, order: Dict[str, Any], call_sid: str) -> Dict[str, Any]:
+        """Handles the yes/no response to an optional prompt."""
+        if any(word in user_input.lower() for word in ["no", "skip", "none", "don't"]):
+            # If user says no, just advance the step and ask the next question
+            order["current_step"] += 1
+            return self.get_next_question(call_sid)
+        else:
+            # If user says yes or anything else, transition to selecting the option
+            order["state"] = "AWAITING_OPTION_CHOICE"
+            return self.get_next_question(call_sid)
+
+    def _handle_info_delivery_choice(self, user_input: str, order: Dict[str, Any], call_sid: str) -> Dict[str, Any]:
+        """Handles user's choice for how to receive the protein options list."""
+        if "sms" in user_input.lower() or "text" in user_input.lower():
+            order["state"] = "AWAITING_PROTEIN_CHOICE" 
+            return {
+                "action": "send_sms_menu",
+                "message_for_agent": "I'm sending that to you now. What would you like to choose?"
+            }
+        else:
+            dish_name = order.get("dish_name", "your combo")
+            if "customized combo" in dish_name.lower():
+                popular_options = self._get_popular_protein_options()
+                options_text = ", ".join(popular_options)
+                message = f"No problem. Some popular choices are: {options_text}. Would you like one of those, or would you like to hear the full list?"
+            else:
+                # Generic message for fixed-price combos if this state is ever reached.
+                message = "Of course. I can read out the choices for each step. Which part of the combo would you like to hear the options for?"
+
+            order["state"] = "AWAITING_PROTEIN_CHOICE" # Remain in this state to handle the user's next response
+            return {"status": "PROVIDING_OPTIONS", "message_for_agent": message}
+
+    def _get_popular_protein_options(self) -> List[str]:
+        """Returns a hardcoded list of popular protein options."""
+        return ["Shrimp", "Mussels", "Crab Legs", "Clams", "Crawfish"]
+
+    def _summarize_protein_options(self, options: List[str]) -> str:
+        """Generates a concise summary of protein options."""
+        # This function now uses the same categorization logic as _get_protein_availability
+        # to avoid code duplication.
+        
+        # We need a temporary way to access the category function.
+        # In a larger refactoring, this might become a static method or a helper function.
+        temp_instance = ComboOrderManager()
+        get_protein_category = temp_instance._get_protein_availability.__closure__[0].cell_contents
+
+        summary = {"shrimp": 0, "crab": 0, "mussels": 0, "clams": 0, "crawfish": 0, "lobster": 0, "scallop": 0, "other": []}
+        
+        processed_options = set()
+
+        for opt in options:
+            cleaned_opt = self._clean_protein_name(opt)
+            if cleaned_opt in processed_options:
+                continue
+            processed_options.add(cleaned_opt)
+            
+            category = get_protein_category(cleaned_opt)
+            if category and category in summary:
+                summary[category] += 1
+            else:
+                summary["other"].append(cleaned_opt)
+
+        summary_parts = []
+        if summary["shrimp"] > 1:
+            summary_parts.append("several types of shrimp")
+        elif summary["shrimp"] == 1:
+            summary_parts.append("shrimp")
+
+        if summary["crab"] > 1:
+            summary_parts.append(f"{summary['crab']} kinds of crab")
+        elif summary["crab"] == 1:
+            summary_parts.append("crab")
+
+        for category in ["mussels", "clams", "crawfish", "lobster", "scallop"]:
+            if summary[category] > 0:
+                summary_parts.append(category)
+        
+        if summary["other"]:
+            summary_parts.extend(summary["other"])
+
+        return f"We have {', '.join(summary_parts)}."
+
+    def _get_protein_availability(self, protein_name: str, dish_details: Dict[str, Any], check_category: bool = False) -> List[Dict[str, Any]]:
+        dish_name_lower = dish_details.get("name", {}).get("en", "").lower()
+
+        if "customized combo" in dish_name_lower:
+            return self._get_custom_combo_protein_availability(protein_name, check_category)
+        else:
+            return self._get_fixed_combo_option_availability(protein_name, dish_details, check_category)
+
+    def _get_fixed_combo_option_availability(self, option_name: str, dish_details: Dict[str, Any], check_category: bool = False) -> List[Dict[str, Any]]:
+        """Dynamically builds catalogs and finds matching options for fixed-price combos."""
+        option_catalog = {}
+        option_variants = {}  # e.g., "shrimp" -> ["1 lb.Shrimp head on", "1 lb. Hesdless Shrimp"]
+
+        for group in dish_details.get("optionGroups", []):
+            for option in group.get("options", []):
+                name = option.get("name", {}).get("en", "")
+                if not name:
+                    continue
+                
+                option_catalog[name.lower()] = option
+                
+                # Simple categorization for variants
+                if "shrimp" in name.lower():
+                    if "shrimp" not in option_variants: option_variants["shrimp"] = []
+                    option_variants["shrimp"].append(name.lower())
+                elif "crawfish" in name.lower():
+                    if "crawfish" not in option_variants: option_variants["crawfish"] = []
+                    option_variants["crawfish"].append(name.lower())
+                elif "mussels" in name.lower():
+                    if "mussels" not in option_variants: option_variants["mussels"] = []
+                    option_variants["mussels"].append(name.lower())
+                elif "crab" in name.lower():
+                    if "crab" not in option_variants: option_variants["crab"] = []
+                    option_variants["crab"].append(name.lower())
+                elif "clams" in name.lower():
+                    if "clams" not in option_variants: option_variants["clams"] = []
+                    option_variants["clams"].append(name.lower())
+                elif "lobster" in name.lower():
+                    if "lobster" not in option_variants: option_variants["lobster"] = []
+                    option_variants["lobster"].append(name.lower())
+                elif "scallop" in name.lower():
+                    if "scallop" not in option_variants: option_variants["scallop"] = []
+                    option_variants["scallop"].append(name.lower())
+
+        option_name_lower = option_name.lower()
+
+        if check_category:
+            return option_name_lower in option_variants
+
+        if option_name_lower in option_variants:
+            variants = option_variants[option_name_lower]
+            return [option_catalog[variant] for variant in variants if variant in option_catalog]
+
+        all_option_names = list(option_catalog.keys()) + list(option_variants.keys())
+        if not all_option_names:
+            return []
+            
+        best_match, score = process.extractOne(option_name_lower, all_option_names)
+        
+        if score >= 80:
+            if best_match in option_variants:
+                variants = option_variants[best_match]
+                return [option_catalog[variant] for variant in variants if variant in option_catalog]
+            if best_match in option_catalog:
+                return [option_catalog[best_match]]
+            
+        return []
+
+    def _get_custom_combo_protein_availability(self, protein_name: str, check_category: bool = False) -> List[Dict[str, Any]]:
+        """
+        Handles protein availability specifically for the 'Customized Combo'.
+        This uses a hardcoded catalog because the "Customized Combo" is a special case
+        where the user can choose from a wide range of proteins that are not explicitly
+        listed as options in the menu data for that item.
+        """
+        protein_catalog = {
+            "shrimp head on": {"1lb": True, "half_pound": True, "name": "shrimp head on"},
+            "headless shrimp": {"1lb": True, "half_pound": True, "name": "headless shrimp"},
+            "peeled tail on": {"1lb": True, "half_pound": True, "name": "peeled tail on"},
+            "fresh crawfish": {"1lb": True, "half_pound": True, "name": "fresh crawfish"},
+            "frozen crawfish": {"1lb": True, "half_pound": True, "name": "frozen crawfish"},
+            "crawfish": {"1lb": True, "half_pound": False, "name": "crawfish"},
+            "lobster tail": {"1lb": True, "half_pound": False, "name": "lobster tail"},
+            "king crab legs": {"1lb": True, "half_pound": False, "name": "king crab legs"},
+            "snow crab legs": {"1lb": True, "half_pound": False, "name": "snow crab legs"},
+            "dungeness legs": {"1lb": True, "half_pound": False, "name": "dungeness legs"},
+            "black mussels": {"1lb": True, "half_pound": True, "name": "black mussels"},
+            "green mussels": {"1lb": True, "half_pound": True, "name": "green mussels"},
+            "clams": {"1lb": True, "half_pound": True, "name": "clams"},
+            "scallop": {"1lb": True, "half_pound": True, "name": "scallop"}
+        }
+
+        protein_variants = {
+            "crawfish": ["fresh crawfish", "frozen crawfish", "crawfish"],
+            "shrimp": ["shrimp head on", "headless shrimp", "peeled tail on"],
+            "mussels": ["black mussels", "green mussels"],
+            "crab": ["king crab legs", "snow crab legs", "dungeness legs"],
+            "clams": ["clams"],
+            "lobster": ["lobster tail"],
+            "scallop": ["scallop"]
+        }
+
+        protein_name_lower = protein_name.lower()
+
+        if check_category:
+            return protein_name_lower in protein_variants
+
+        if protein_name_lower in protein_variants:
+            variants = protein_variants[protein_name_lower]
+            return [protein_catalog[variant] for variant in variants if variant in protein_catalog]
+
+        all_protein_names = list(protein_catalog.keys()) + list(protein_variants.keys())
+        best_match, score = process.extractOne(protein_name_lower, all_protein_names)
+        
+        if score >= 80:
+            if best_match in protein_variants:
+                variants = protein_variants[best_match]
+                return [protein_catalog[variant] for variant in variants if variant in protein_catalog]
+            return [protein_catalog[best_match]]
+            
+        return []
+
+    def _find_option_group_for_input(self, user_input: str, order: Dict[str, Any]):
+        """Finds the option group, matched option, and its index for a given user input."""
+        option_groups = order["dish_details"].get("optionGroups", [])
+        
+        best_group_info = {
+            "name": None,
+            "option": None,
+            "index": -1,
+            "score": 0
+        }
+
+        for i, group in enumerate(option_groups):
+            group_name = group.get("name", {}).get("en")
+            # Skip the protein selection group as it's handled differently
+            if not group_name or "choose one" in group_name.lower() or "half a pound" in group_name.lower():
+                continue
+
+            options = [opt.get("name", {}).get("en") for opt in group.get("options", [])]
+            if not options:
+                continue
+                
+            best_match, score = process.extractOne(user_input, options)
+            
+            if score > best_group_info["score"]:
+                best_group_info["score"] = score
+                best_group_info["name"] = group_name
+                best_group_info["option"] = best_match
+                best_group_info["index"] = i
+
+        if best_group_info["score"] >= 80:
+            return best_group_info["name"], best_group_info["option"], best_group_info["index"]
+            
+        return None, None, -1
+
+    def _find_protein_to_update(self, user_input: str, order: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+    Finds a protein in the current order that matches the user's input.
+    Returns the protein dictionary if a match is found, otherwise None.
+    """
+        if "proteins" not in order["selections"]:
+            return None
+
+        protein_names_in_order = [p["name"] for p in order["selections"]["proteins"]]
+        if not protein_names_in_order:
+            return None
+
+    # Use fuzzy matching to find the best match for the user's input among the proteins already in the order.
+        best_match, score = process.extractOne(user_input, protein_names_in_order)
+
+        if score >= 80:  # Threshold for a confident match
+        # Find the corresponding protein dictionary
+            for protein in order["selections"]["proteins"]:
+                if protein["name"] == best_match:
+                    return protein
+        return None
+
+    def _handle_more_proteins(self, user_input: str, order: Dict[str, Any], call_sid: str) -> Dict[str, Any]:
+        user_input_lower = user_input.lower().strip()
+        
+        # More robust check for negative/finished responses.
+        negative_phrases = [
+            "no", "nope", "done", "no that's it", "that is all", "no that's all", 
+            "im good", "i'm good", "no more", "no thanks", "no thank you", "that's it"
+        ]
+
+        is_negative = any(phrase in user_input_lower for phrase in negative_phrases)
+
+        if is_negative:
+            # User is done adding proteins. Confirm what's been added and move to the next step in one go.
+            order["state"] = "AWAITING_OPTION_CHOICE"
+            protein_summary = ", ".join([f"{p.get('size', '1 lb')} of {p['name']}" for p in order["selections"]["proteins"]])
+            
+            # Get the next question payload
+            next_question_payload = self.get_next_question(call_sid)
+            
+            # Prepend the confirmation to the next question's message
+            original_message = next_question_payload.get("message_for_agent", "")
+            if original_message:
+                 next_question_payload["message_for_agent"] = f"Okay, I have {protein_summary}. Now, {original_message[0].lower()}{original_message[1:]}"
+            else: # Fallback in case get_next_question has an issue
+                 next_question_payload["message_for_agent"] = f"Okay, I have {protein_summary}. What's next?"
+
+            return next_question_payload
+        
+        # If the user says a simple "yes", prompt them for the next item.
+        affirmative_responses = ["yes", "sure", "yeah", "another"]
+        if any(phrase in user_input_lower for phrase in affirmative_responses):
+            order["state"] = "AWAITING_PROTEIN_CHOICE"
+            return {
+                "action": "PROMPT_FOR_PROTEIN",
+                "message_for_agent": "Great! What other protein would you like to add?"
+            }
+
+        # Otherwise, assume the user is naming the next protein directly.
+        order["state"] = "AWAITING_PROTEIN_CHOICE"
+        return self._handle_protein_selection(user_input, order, call_sid)
+
+    def _finalize_combo_and_prepare_for_cart(self, user_input: str, order: Dict[str, Any], call_sid: str) -> Dict[str, Any]:
+        """
+        Handles the final confirmation of the combo, adds it to the completed list,
+        and prepares it to be added to the main cart.
+        """
+        if any(word in user_input.lower() for word in ["yes", "correct", "right", "yep"]):
+            # User confirms the combo. Finalize it.
+            self.add_completed_combo(call_sid, order)
+            
+            selections = order.get("selections", {})
+            product_options = {key: value for key, value in selections.items()}
+            if 'proteins' in selections:
+                product_options['proteins'] = selections['proteins']
+
+            completed_item = {
+                "name": order["dish_name"],
+                "quantity": 1,
+                "options": product_options,
+            }
+
+            # Now, ask if they want to add more items to the order.
+            # This is a clear, explicit next step.
+            order["state"] = "AWAITING_MORE_ITEMS_PROMPT"
+            
+            # Clear the active order since it's now complete
+            self.clear_order(call_sid)
+            
+            return {
+                "status": "ITEM_READY_FOR_CART",
+                "action": "PROMPT_FOR_MORE_ITEMS",
+                "message_for_agent": f"Great, I've added the {order['dish_name']} to your order. Would you like to add anything else?",
+                "item_to_add": completed_item
+            }
+        
+        # Handle cases where the user wants to make a change.
+        else:
+            # If the user's response is not a confirmation, assume they want to make a change.
+            # Transition to the AWAITING_UPDATE state to handle the modification.
+            order["state"] = "AWAITING_UPDATE"
+            # Pass the user's input to the update handler.
+            return self.update_combo_selection(user_input, order, call_sid)
+
+    def get_next_question(self, call_sid: str) -> Dict[str, Any]:
+        if call_sid not in self.active_orders:
+            return {"message_for_agent": "Sorry, I can't find your order."}
+
+        order = self.active_orders[call_sid]
+        is_customized_combo = "customized combo" in order["dish_name"].lower()
+        option_groups = order["dish_details"].get("optionGroups", [])
+        
+        while order["current_step"] < len(option_groups):
+            current_group = option_groups[order["current_step"]]
+            group_name = current_group.get("name", {}).get("en", "").lower()
+
+            if is_customized_combo and ("choose one" in group_name or "half a pound" in group_name):
+                order["current_step"] += 1
+                continue
+
+            order["state"] = "AWAITING_OPTION_CHOICE"
+            if not is_customized_combo:
+                options = [self._clean_option_name_for_tts(opt.get("name", {}).get("en")) for opt in current_group.get("options", [])]
+            else:
+                options = [opt.get("name", {}).get("en") for opt in current_group.get("options", [])]
+            options_str = ", ".join(options)
+            
+            message = f"For your {order['dish_name']}, what would you like for {current_group.get('name', {}).get('en')}? Your options are: {options_str}."
+            
+            order["current_step"] += 1
+            return {
+                "action": "get_selection",
+                "message_for_agent": message
+            }
+
+        order["state"] = "AWAITING_FINAL_CONFIRMATION"
+        summary = self.get_order_summary(call_sid)
+        return {
+            "action": "confirm_order",
+            "message_for_agent": f"I have your {order['dish_name']} with {summary}. Is that correct?",
+            "options": order["selections"]
+        }
+
+    def get_order_summary(self, call_sid: str) -> str:
+        if call_sid not in self.active_orders:
+            return "No order found."
+        order = self.active_orders[call_sid]
+        
+        summary_parts = []
+        if "proteins" in order["selections"] and order["selections"]["proteins"]:
+            protein_summary = ", ".join([f"{p.get('size', '1 lb')} of {p['name']}" for p in order["selections"]["proteins"]])
+            summary_parts.append(f"\n- {protein_summary}")
+
+        for key, value in order["selections"].items():
+            if key != "proteins":
+                # Format the key to be more readable
+                formatted_key = key.replace("_", " ").title()
+                summary_parts.append(f"\n- {formatted_key}: {value}")
+                
+        return "".join(summary_parts)
+
+    def update_combo_selection(self, user_input: str, order: Dict[str, Any], call_sid: str) -> Dict[str, Any]:
+        """
+    Handles user requests to update a combo selection during final confirmation.
+    """
+    # Attempt to find a matching option group (e.g., flavor, spice level)
+        group_name, matched_option, _ = self._find_option_group_for_input(user_input, order)
+    
+        if group_name and matched_option:
+        # Update the selection for the found group
+            order["selections"][group_name] = matched_option
+            logger.info(f"Updated combo option '{group_name}' to '{matched_option}' for call_sid: {call_sid}")
+        
+        # Re-confirm the order
+            order["state"] = "AWAITING_FINAL_CONFIRMATION"
+            summary = self.get_order_summary(call_sid)
+            return {
+            "action": "confirm_order",
+            "message_for_agent": f"Okay, I've updated the {group_name} to {matched_option}. Now I have your combo with {summary}. Is that correct?"
+        }
+
+    # If no option group was found, check if the user wants to change a protein
+        protein_to_update = self._find_protein_to_update(user_input, order)
+        if protein_to_update:
+        # For now, we'll just acknowledge and re-prompt.
+        # A more advanced implementation would guide the user through changing the protein.
+            order["state"] = "AWAITING_FINAL_CONFIRMATION"
+            summary = self.get_order_summary(call_sid)
+            return {
+            "action": "reprompt",
+            "message_for_agent": f"It looks like you want to change something about the {protein_to_update['name']}. Could you please specify what you'd like to change?"
+        }
+
+    # If no specific change can be identified, reprompt for clarification
+        summary = self.get_order_summary(call_sid)
+        return {
+        "action": "reprompt",
+        "message_for_agent": f"I'm sorry, I didn't catch that. Your order is currently {summary}. What would you like to change?"
+    }
+
+    def get_completed_order(self, call_sid: str) -> Optional[Dict[str, Any]]:
+        return self.active_orders.get(call_sid)
+
+    def clear_order(self, call_sid: str):
+        if call_sid in self.active_orders:
+            del self.active_orders[call_sid]
+
+combo_order_manager = ComboOrderManager()

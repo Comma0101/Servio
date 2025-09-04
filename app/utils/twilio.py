@@ -76,7 +76,8 @@ def gather_voice_message(client_id, message, action_url, param_string):
         
         response = VoiceResponse()
         gather = Gather(
-            input="speech",
+            input="speech dtmf",
+            num_digits=1,
             action=action_url + "?" + param_string,
             speech_timeout=CONSTANTS[client_id]["TWILIO_SPEECH_TIMEOUT"],
             speech_model=CONSTANTS[client_id]["TWILIO_SPEECH_MODEL"],
@@ -174,6 +175,56 @@ def end_call(call_sid):
             "call_sid": call_sid,
             "error": str(e)
         }
+
+
+def redirect_call(call_sid, twiml_url):
+    """
+    Redirect a call to a new TwiML URL.
+    
+    Args:
+        call_sid (str): The SID of the call to redirect.
+        twiml_url (str): The URL to fetch TwiML from.
+        
+    Returns:
+        dict: A dictionary containing the call SID and status.
+    """
+    try:
+        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        call = client.calls(call_sid).update(
+            url=twiml_url,
+            method="POST"
+        )
+        logger.info(f"Redirected call {call_sid} to {twiml_url}")
+        return {"success": True, "call_sid": call.sid, "status": call.status}
+    except Exception as e:
+        logger.error(f"Error redirecting call {call_sid}: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def create_outbound_call(to_number, from_number, twiml_url):
+    """
+    Create a new outbound call.
+    
+    Args:
+        to_number (str): The number to call.
+        from_number (str): The Twilio number to call from.
+        twiml_url (str): The URL to fetch TwiML from.
+        
+    Returns:
+        dict: A dictionary containing the call SID and status.
+    """
+    try:
+        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        call = client.calls.create(
+            to=to_number,
+            from_=from_number,
+            url=twiml_url
+        )
+        logger.info(f"Created outbound call to {to_number} with SID: {call.sid}")
+        return {"success": True, "call_sid": call.sid, "status": call.status}
+    except Exception as e:
+        logger.error(f"Error creating outbound call to {to_number}: {e}")
+        return {"success": False, "error": str(e)}
 
 
 def send_sms(to_number, message, client_id="LIMF"):

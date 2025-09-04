@@ -76,8 +76,9 @@ class Settings(BaseSettings):
     RESTAURANT_MENU_JSON: str = DEFAULT_MENU_JSON # Store as JSON string
     RESTAURANT_OPENAI_TOOLS: List[Dict[str, Any]] = DEFAULT_OPENAI_TOOLS
     RESTAURANT_TAX_RATE: float = DEFAULT_TAX_RATE
-    CHINESE_WELCOME_MESSAGE: str = "您好！请问您今天想尝点什么呢？如果您不清楚我们的菜单，我们可以通过短信发给您,如果遇到延迟或者停顿是系统忙,正在处理订单，请您耐心等待。"
-
+    CHINESE_WELCOME_MESSAGE: str = "您好！欢迎致电食为天餐厅。请您注意，目前我们只支持到店自取和付款。您可以直接开始点餐，或让我通过短信将菜单发给您。如需人工服务，请随时按0。"
+    ENGLISH_WELCOME_MESSAGE: str = "Hello! Welcome to {restaurant_name}."
+    # Please note that we currently only support in-store pickup and payment. You can start ordering directly, or I can send you the menu via text message. If you need manual service, please press 0 at any time."
     # Other Configuration
     PUBLIC_BASE_URL: Optional[str] = None
     FALLBACK_CALLER_ID: str = "+18005551234" # Moved hardcoded fallback here

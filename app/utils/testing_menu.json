@@ -1,0 +1,1065 @@
+{
+  "id": "28E918AA-8197-4F7E-BED2-78FFE694499A",
+  "name": {
+    "en": "Api Testing Menu",
+    "zh": "Api测试菜品"
+  },
+  "items": [
+    {
+      "id": "2413227D-DD55-4CB0-8571-B70FA8E0CB46",
+      "categoryId": "28E918AA-8197-4F7E-BED2-78FFE694499A",
+      "name": {
+        "en": "Customized Combo",
+        "zh": "Customized Combo"
+      },
+      "description": {
+        "en": "1 lb King Crab's Legs or Whole Dungeness Crab or Whole Lobster, 1 lb. Shrimp or lb. Craw-Fish, ONE Lobster Tail, 1 lb. Clams ,Dungeness crab ; Free three items choose from (1pc) corn or (2pc) potatoes  or (4pc) sausages",
+        "zh": "1 lb King Crab's Legs or Whole Dungeness Crab or Whole Lobster, 1 lb. Shrimp or lb. Craw-Fish, ONE Lobster Tail, 1 lb. Clams ,Dungeness crab ; Free three items choose from (1pc) corn or (2pc) potatoes  or (4pc) sausages"
+      },
+      "price": 0.0,
+      "imageUrl": "",
+      "remainCount": 999999,
+      "quantityMin": null,
+      "quantityMax": null,
+      "weightAdjustStep": null,
+      "weightMin": null,
+      "weightMax": null,
+      "optionGroups": [
+        {
+          "name": {
+            "en": "CHOOSE ONE",
+            "zh": "CHOOSE ONE"
+          },
+          "isRequired": false,
+          "isAllowMultiple": true,
+          "description": null,
+          "options": [
+            {
+              "name": {
+                "en": "1lb.shrimp head on",
+                "zh": "1lb.shrimp head on"
+              },
+              "adjustPrice": 18.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1lb.headless shrimp",
+                "zh": "1lb.headless shrimp"
+              },
+              "adjustPrice": 20.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1lb Peeled Tail On",
+                "zh": "1lb Peeled Tail On"
+              },
+              "adjustPrice": 24.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1lb.fresh crawfish",
+                "zh": "1lb.fresh crawfish"
+              },
+              "adjustPrice": 21.99,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1lb.Frz crawfish",
+                "zh": "1lb.Frz crawfish"
+              },
+              "adjustPrice": 20.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1(pc).Lobster Tail",
+                "zh": "1(pc).Lobster Tail"
+              },
+              "adjustPrice": 21.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1lb. King Crab Legs 1corn 1 order pot",
+                "zh": "1lb. King Crab Legs 1corn 1 order pot"
+              },
+              "adjustPrice": 75.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1lb.Snow Crab Legs",
+                "zh": "1lb.Snow Crab Legs"
+              },
+              "adjustPrice": 40.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1lb Dungeness Legs",
+                "zh": "1lb Dungeness Legs"
+              },
+              "adjustPrice": 45.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1lb. Black Mussels",
+                "zh": "1lb. Black Mussels"
+              },
+              "adjustPrice": 17.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1lb.Green Mussels",
+                "zh": "1lb.Green Mussels"
+              },
+              "adjustPrice": 18.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1lb. Clams",
+                "zh": "1lb. Clams"
+              },
+              "adjustPrice": 18.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1lb. Scallop",
+                "zh": "1lb. Scallop"
+              },
+              "adjustPrice": 22.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1 lb crawfish",
+                "zh": "1 lb crawfish"
+              },
+              "adjustPrice": 20.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            }
+          ]
+        },
+        {
+          "name": {
+            "en": "half a pound",
+            "zh": "half a pound"
+          },
+          "isRequired": false,
+          "isAllowMultiple": true,
+          "description": null,
+          "options": [
+            {
+              "name": {
+                "en": "half a pound (shrimp head on)",
+                "zh": "half a pound (shrimp head on)"
+              },
+              "adjustPrice": 11.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "half a pound (headless shrimp)",
+                "zh": "half a pound (headless shrimp)"
+              },
+              "adjustPrice": 12.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "half a pound Peeled Tail on",
+                "zh": "half a pound Peeled Tail on"
+              },
+              "adjustPrice": 14.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "half pound of fresh crawfish",
+                "zh": "half pound of fresh crawfish"
+              },
+              "adjustPrice": 12.5,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "half a pound 0.5 frz crawfish",
+                "zh": "half a pound 0.5 frz crawfish"
+              },
+              "adjustPrice": 12.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "half a pound (black mussels)",
+                "zh": "half a pound (black mussels)"
+              },
+              "adjustPrice": 10.5,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "half a pound (green mussels)",
+                "zh": "half a pound (green mussels)"
+              },
+              "adjustPrice": 11.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "half a pound (clams)",
+                "zh": "half a pound (clams)"
+              },
+              "adjustPrice": 10.5,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "half a pound (scallop)",
+                "zh": "half a pound (scallop)"
+              },
+              "adjustPrice": 13.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            }
+          ]
+        },
+        {
+          "name": {
+            "en": "PICK YOUR FLAVOR",
+            "zh": "PICK YOUR FLAVOR"
+          },
+          "isRequired": true,
+          "isAllowMultiple": false,
+          "description": null,
+          "options": [
+            {
+              "name": {
+                "en": "No Flavor",
+                "zh": "No Flavor"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Crabby (butter)",
+                "zh": "Crabby (butter)"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Lemon Pepper",
+                "zh": "Lemon Pepper"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Garlic Sauce",
+                "zh": "Garlic Sauce"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Crabby Crabby (Mix all three)",
+                "zh": "Crabby Crabby (Mix all three)"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            }
+          ]
+        },
+        {
+          "name": {
+            "en": "HOW SPICY",
+            "zh": "HOW SPICY"
+          },
+          "isRequired": true,
+          "isAllowMultiple": false,
+          "description": null,
+          "options": [
+            {
+              "name": {
+                "en": "No Cajun(no red sauce)",
+                "zh": "No Cajun(no red sauce)"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Sweet Non Spice",
+                "zh": "Sweet Non Spice"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Low",
+                "zh": "Low"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Mild",
+                "zh": "Mild"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Hot",
+                "zh": "Hot"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Burn My Tongue",
+                "zh": "Burn My Tongue"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            }
+          ]
+        },
+        {
+          "name": {
+            "en": "PICK YOUR EXTRAS(OPTIONAL)",
+            "zh": "PICK YOUR EXTRAS(OPTIONAL)"
+          },
+          "isRequired": false,
+          "isAllowMultiple": true,
+          "description": null,
+          "options": [
+            {
+              "name": {
+                "en": "Corn(1pc)",
+                "zh": "Corn(1pc)"
+              },
+              "adjustPrice": 3.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "oyster.1pc",
+                "zh": "oyster.1pc"
+              },
+              "adjustPrice": 3.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Potatoes(3pc)",
+                "zh": "Potatoes(3pc)"
+              },
+              "adjustPrice": 3.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Sausages(8pc)",
+                "zh": "Sausages(8pc)"
+              },
+              "adjustPrice": 5.99,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "eggs(3pc)",
+                "zh": "eggs(3pc)"
+              },
+              "adjustPrice": 4.99,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "sauce on side",
+                "zh": "sauce on side"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "4552A21C-1B44-4EAD-989B-47240ED1AC79",
+      "categoryId": "28E918AA-8197-4F7E-BED2-78FFE694499A",
+      "name": {
+        "en": "COMBO #1",
+        "zh": "COMBO #1"
+      },
+      "description": {
+        "en": null,
+        "zh": null
+      },
+      "price": 55.0,
+      "imageUrl": "",
+      "remainCount": 999999,
+      "quantityMin": null,
+      "quantityMax": null,
+      "weightAdjustStep": null,
+      "weightMin": null,
+      "weightMax": null,
+      "optionGroups": [
+        {
+          "name": {
+            "en": "CHOOSE ONE",
+            "zh": "CHOOSE ONE"
+          },
+          "isRequired": true,
+          "isAllowMultiple": false,
+          "description": null,
+          "options": [
+            {
+              "name": {
+                "en": "1 lb.Shrimp head on",
+                "zh": "1 lb.Shrimp head on"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1 lb. Hesdless Shrimp",
+                "zh": "1 lb. Hesdless Shrimp"
+              },
+              "adjustPrice": 2.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1 lb.clams",
+                "zh": "1 lb.clams"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1 lb peeled Tail On",
+                "zh": "1 lb peeled Tail On"
+              },
+              "adjustPrice": 6.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            }
+          ]
+        },
+        {
+          "name": {
+            "en": "CHOOSE ONE",
+            "zh": "CHOOSE ONE"
+          },
+          "isRequired": true,
+          "isAllowMultiple": false,
+          "description": null,
+          "options": [
+            {
+              "name": {
+                "en": "1 lb.Frz crawfish",
+                "zh": "1 lb.Frz crawfish"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1 lb.Fresh crawfish",
+                "zh": "1 lb.Fresh crawfish"
+              },
+              "adjustPrice": 2.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1 lb.Shrimp Head on",
+                "zh": "1 lb.Shrimp Head on"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1 lb.headless shrimp",
+                "zh": "1 lb.headless shrimp"
+              },
+              "adjustPrice": 2.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1（pc） lobster tail",
+                "zh": "1（pc） lobster tail"
+              },
+              "adjustPrice": 3.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1 ib scallos",
+                "zh": "1 ib scallos"
+              },
+              "adjustPrice": 4.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1 ib Peeled tail on",
+                "zh": "1 ib Peeled tail on"
+              },
+              "adjustPrice": 6.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            }
+          ]
+        },
+        {
+          "name": {
+            "en": "CHOOSE ONE",
+            "zh": "CHOOSE ONE"
+          },
+          "isRequired": true,
+          "isAllowMultiple": false,
+          "description": null,
+          "options": [
+            {
+              "name": {
+                "en": "1 lb green mussels",
+                "zh": "1 lb green mussels"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1 lb black mussels",
+                "zh": "1 lb black mussels"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1 lb shrimp head on",
+                "zh": "1 lb shrimp head on"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1 lb Headless shrimp",
+                "zh": "1 lb Headless shrimp"
+              },
+              "adjustPrice": 2.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1 in peeled tail on",
+                "zh": "1 in peeled tail on"
+              },
+              "adjustPrice": 6.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            }
+          ]
+        },
+        {
+          "name": {
+            "en": "Pick 1 free",
+            "zh": "Pick 1 free"
+          },
+          "isRequired": true,
+          "isAllowMultiple": false,
+          "description": null,
+          "options": [
+            {
+              "name": {
+                "en": "potatoes（3pc)",
+                "zh": "potatoes（3pc)"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "1 pc of corn",
+                "zh": "1 pc of corn"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "4 pc of sausage",
+                "zh": "4 pc of sausage"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            }
+          ]
+        },
+        {
+          "name": {
+            "en": "CHOOSE ONE FOR FREE",
+            "zh": "CHOOSE ONE FOR FREE"
+          },
+          "isRequired": true,
+          "isAllowMultiple": false,
+          "description": null,
+          "options": [
+            {
+              "name": {
+                "en": "corn(1pc)",
+                "zh": "corn(1pc)"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Potatoes(3pc)",
+                "zh": "Potatoes(3pc)"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Sausges(4pc)",
+                "zh": "Sausges(4pc)"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            }
+          ]
+        },
+        {
+          "name": {
+            "en": "PICK YOUR FLAVOR",
+            "zh": "PICK YOUR FLAVOR"
+          },
+          "isRequired": true,
+          "isAllowMultiple": false,
+          "description": null,
+          "options": [
+            {
+              "name": {
+                "en": "No Flavor",
+                "zh": "No Flavor"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Crabby (butter)",
+                "zh": "Crabby (butter)"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Lemon Pepper",
+                "zh": "Lemon Pepper"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Garlic Sauce",
+                "zh": "Garlic Sauce"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Crabby Crabby (Mix all three)",
+                "zh": "Crabby Crabby (Mix all three)"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            }
+          ]
+        },
+        {
+          "name": {
+            "en": "HOW SPICY",
+            "zh": "HOW SPICY"
+          },
+          "isRequired": true,
+          "isAllowMultiple": false,
+          "description": null,
+          "options": [
+            {
+              "name": {
+                "en": "No Cajun(no red sauce)",
+                "zh": "No Cajun(no red sauce)"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Sweet Non Spice",
+                "zh": "Sweet Non Spice"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Low",
+                "zh": "Low"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Mild",
+                "zh": "Mild"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Hot",
+                "zh": "Hot"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Burn My Tongue",
+                "zh": "Burn My Tongue"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": false,
+              "isOutOfStock": false,
+              "choosedCount": null
+            }
+          ]
+        },
+        {
+          "name": {
+            "en": "PICK YOUR EXTRAS(OPTIONAL)",
+            "zh": "PICK YOUR EXTRAS(OPTIONAL)"
+          },
+          "isRequired": false,
+          "isAllowMultiple": true,
+          "description": null,
+          "options": [
+            {
+              "name": {
+                "en": "Corn(1pc)",
+                "zh": "Corn(1pc)"
+              },
+              "adjustPrice": 2.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "oyster.1pc",
+                "zh": "oyster.1pc"
+              },
+              "adjustPrice": 2.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Potatoes(3pc)",
+                "zh": "Potatoes(3pc)"
+              },
+              "adjustPrice": 2.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "Sausages(8pc)",
+                "zh": "Sausages(8pc)"
+              },
+              "adjustPrice": 4.99,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "eggs(3pc)",
+                "zh": "eggs(3pc)"
+              },
+              "adjustPrice": 3.99,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            },
+            {
+              "name": {
+                "en": "sauce on side",
+                "zh": "sauce on side"
+              },
+              "adjustPrice": 0.0,
+              "linkedProductId": null,
+              "isAllowAdjustCount": true,
+              "isOutOfStock": false,
+              "choosedCount": null
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

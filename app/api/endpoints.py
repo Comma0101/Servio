@@ -469,3 +469,16 @@ async def add_order_to_menu_endpoint(order_data: MenuApiOrderDto):
     except Exception as e:
         logger.error(f"Error in /order/add (Menu) endpoint: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.api_route("/v1/human-handoff-twiml", methods=["GET", "POST"])
+async def human_handoff_twiml(request: Request):
+    """
+    This TwiML endpoint is used to handle the human handoff.
+    It dials the human agent.
+    """
+    from app.constants import HUMAN_AGENT_PHONE_NUMBER
+    response = VoiceResponse()
+    response.say("Now redirecting you to our human assistant, please wait.", voice="Polly.Joanna-Neural")
+    response.dial(HUMAN_AGENT_PHONE_NUMBER)
+    return Response(content=str(response), media_type="application/xml")

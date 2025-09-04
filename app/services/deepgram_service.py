@@ -30,6 +30,7 @@ class DeepgramService:
         self.stop_event = stop_event
         self.websocket: Optional[websockets.WebSocketClientProtocol] = None
         self.connected = False
+        self.is_final_confirmation_sent = False
         self.message_handlers: List[Callable[[Dict[str, Any]], Awaitable[None]]] = []
 
         logger.info(f"Initialized Deepgram service (STT mode: {self.use_stt_endpoint})")
@@ -53,29 +54,29 @@ class DeepgramService:
                     # Connect to dedicated STT endpoint: wss://api.deepgram.com/v1/listen
                     # STT parameters are passed as query parameters
                     stt_params = self.config.get("listen", {})
-                    stt_params = self.config.get("listen", {})
                     query_string_parts = []
                     
-                    for key, value in stt_params.items():
-                        if value is not None: # Ensure boolean False is handled correctly if needed
-                             query_string_parts.append(f"{key}={str(value).lower() if isinstance(value, bool) else value}")
-                    
-                    # Default to interim_results=False, smart_format=True if not specified for STT
-                    if "interim_results" not in stt_params: query_string_parts.append("interim_results=false")
-                    if "smart_format" not in stt_params: query_string_parts.append("smart_format=true")
-                    if "punctuate" not in stt_params: query_string_parts.append("punctuate=true")
+                    provider_config = stt_params.get("provider", stt_params)
+                    for key, value in provider_config.items():
+                        if value is not None:
+                            query_string_parts.append(f"{key}={str(value).lower() if isinstance(value, bool) else value}")
+                        
+                        # Default to interim_results=False, smart_format=True if not specified for STT
+                        if "interim_results" not in stt_params: query_string_parts.append("interim_results=false")
+                        if "smart_format" not in stt_params: query_string_parts.append("smart_format=true")
+                        if "punctuate" not in stt_params: query_string_parts.append("punctuate=true")
 
 
-                    # Ensure essential parameters are present for STT
-                    if "model" not in stt_params:
-                        logger.warning("STT config missing 'model', defaulting to 'nova-2-general'")
-                        query_string_parts.append("model=nova-2-general") # Or handle as error
-                    if "encoding" not in stt_params:
-                         logger.warning("STT config missing 'encoding', defaulting to 'linear16'")
-                         query_string_parts.append("encoding=linear16") # Or handle as error
-                    if "sample_rate" not in stt_params:
-                         logger.warning("STT config missing 'sample_rate', defaulting to 16000")
-                         query_string_parts.append("sample_rate=16000")
+                        # Ensure essential parameters are present for STT
+                        if "model" not in stt_params:
+                            logger.warning("STT config missing 'model', defaulting to 'nova-3'")
+                            query_string_parts.append("model=nova-3") # Or handle as error
+                        if "encoding" not in stt_params:
+                            logger.warning("STT config missing 'encoding', defaulting to 'linear16'")
+                            query_string_parts.append("encoding=linear16") # Or handle as error
+                        if "sample_rate" not in stt_params:
+                            logger.warning("STT config missing 'sample_rate', defaulting to 16000")
+                            query_string_parts.append("sample_rate=16000")
 
 
                     query_string = "&".join(query_string_parts)
@@ -102,6 +103,15 @@ class DeepgramService:
                     if "think" not in self.config["agent"]: self.config["agent"]["think"] = {}
                     # The 'instructions' field is now expected to be fully formed in self.config
                     # No suffix will be appended here.
+
+                    # Default to nova-3 for agent's STT model if not specified
+                    if "listen" not in self.config["agent"]:
+                        self.config["agent"]["listen"] = {}
+                    if "provider" not in self.config["agent"]["listen"]:
+                        self.config["agent"]["listen"]["provider"] = {}
+                    if "model" not in self.config["agent"]["listen"]["provider"]:
+                        logger.warning("Agent config missing STT model, defaulting to 'nova-3'")
+                        self.config["agent"]["listen"]["provider"]["model"] = "nova-3"
                                         
                     sanitized_config = json.dumps(self.config) # Consider more robust sanitization
                     logger.info(f"Connecting to Deepgram Agent with configuration: {sanitized_config}")
