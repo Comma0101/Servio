@@ -218,6 +218,43 @@ async def _find_dish(portal_id: str, name_to_find: str, language: Literal['en', 
     logger.info(f"Found {len(contains_matches)} 'contains' {language} match(es) for '{name_to_find}'.")
     return contains_matches[:4]
 
+def _patch_menu_with_local_overrides(
+    live_menu: List[Dict[str, Any]], portal_id: str
+) -> List[Dict[str, Any]]:
+    """
+    Overrides items in the live menu with corrected versions from a local JSON file.
+    This is a targeted fix for known API issues, like missing English names for combos.
+    """
+    try:
+        with open("app/utils/testing_menu.json", "r", encoding="utf-8") as f:
+            local_menu_data = json.load(f)
+            # The local menu is a single category object containing items
+            override_items = {
+                item["id"]: item for item in local_menu_data.get("items", [])
+            }
+    except (IOError, json.JSONDecodeError) as e:
+        logger.error(f"Could not load local menu override for portal {portal_id}: {e}")
+        return live_menu  # Return original menu if override fails
+
+    if not override_items:
+        return live_menu
+
+    logger.warning(f"Patching live menu for portal {portal_id} with local overrides.")
+    patched_menu = []
+    for category in live_menu:
+        patched_items = []
+        for item in category.get("items", []):
+            item_id = item.get("id")
+            if item_id in override_items:
+                logger.info(f"Overriding item '{item_id}' with local version.")
+                patched_items.append(override_items[item_id])
+            else:
+                patched_items.append(item)
+        category["items"] = patched_items
+        patched_menu.append(category)
+
+    return patched_menu
+
 def _preprocess_menu_data(raw_menu: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Preprocesses menu data to add helpful flags, like is_combo."""
     for category in raw_menu:
@@ -232,74 +269,58 @@ def _preprocess_menu_data(raw_menu: List[Dict[str, Any]]) -> List[Dict[str, Any]
 async def get_extracted_dishes(portal_id: str) -> Dict[str, Any]:
     """
     Fetches a flattened list of all dishes for a portal, using a cache.
-    This is the primary function for retrieving menu data for tool logic.
+    It fetches the live menu, then applies local overrides for known API issues
+    before caching and returning the result.
     """
-    # --- Start of Testing Modification ---
-    testing_menu_path = "app/utils/testing_menu.json"
-    logger.warning(f"--- USING TESTING MENU --- Overriding menu for portal {portal_id} with data from {testing_menu_path}")
-    try:
-        with open(testing_menu_path, "r", encoding="utf-8") as f:
-            raw_menu = json.load(f)
-        
-        # The testing_menu.json is already in the format of a single category with items.
-        # We need to wrap it in a list to mimic the structure of _get_raw_detailed_menu
-        # which returns a list of categories.
-        if isinstance(raw_menu, dict) and "items" in raw_menu:
-             raw_menu = [raw_menu] # Wrap the single menu object in a list
-        
-        raw_menu = _preprocess_menu_data(raw_menu)
+    cache_file = CACHE_FILE_TEMPLATE.format(portal_id=portal_id)
 
-    except (IOError, json.JSONDecodeError) as e:
-        logger.error(f"Failed to load testing menu from {testing_menu_path}: {e}")
-        return {"success": False, "message": f"Failed to load testing menu: {e}", "data": []}
-    # --- End of Testing Modification ---
+    # Check cache first
+    if os.path.exists(cache_file):
+        try:
+            with open(cache_file, "r", encoding="utf-8") as f:
+                cached_data = json.load(f)
+            cache_timestamp = datetime.fromisoformat(cached_data.get("timestamp", ""))
+            if datetime.now() - cache_timestamp < timedelta(hours=CACHE_DURATION_HOURS):
+                logger.info(f"Serving extracted dishes for portal {portal_id} from cache.")
+                return {"success": True, "message": "Data from cache", "data": cached_data.get("dishes", [])}
+        except (json.JSONDecodeError, IOError, TypeError, ValueError) as e:
+            logger.warning(f"Cache read error for portal {portal_id}: {e}. Fetching fresh data.")
 
-    # # --- Original Implementation (Commented Out for Testing) ---
-    # cache_file = CACHE_FILE_TEMPLATE.format(portal_id=portal_id)
-
-    # # Check cache first
-    # if os.path.exists(cache_file):
-    #     try:
-    #         with open(cache_file, "r", encoding="utf-8") as f:
-    #             cached_data = json.load(f)
-    #         cache_timestamp = datetime.fromisoformat(cached_data.get("timestamp", ""))
-    #         if datetime.now() - cache_timestamp < timedelta(hours=CACHE_DURATION_HOURS):
-    #             logger.info(f"Serving extracted dishes for portal {portal_id} from cache.")
-    #             return {"success": True, "message": "Data from cache", "data": cached_data.get("dishes", [])}
-    #     except (json.JSONDecodeError, IOError, TypeError, ValueError) as e:
-    #         logger.warning(f"Cache read error for portal {portal_id}: {e}. Fetching fresh data.")
-
-    # # Fetch fresh data if cache is invalid or stale
-    # raw_menu = await _get_raw_detailed_menu(portal_id)
-    
+    # Fetch fresh data if cache is invalid or stale
+    raw_menu = await _get_raw_detailed_menu(portal_id)
     if not raw_menu:
         return {"success": False, "message": "Failed to fetch raw menu data from API.", "data": []}
 
+    # Patch the raw menu with local overrides for known issues
+    patched_menu = _patch_menu_with_local_overrides(raw_menu, portal_id)
+    
+    # Preprocess data to add helpful flags (e.g., is_combo)
+    processed_menu = _preprocess_menu_data(patched_menu)
+
     extracted_dishes = []
-    for category in raw_menu:
+    for category in processed_menu:
         for dish in category.get("items", []):
             extracted_dishes.append({
                 "dish_id": dish.get("id"),
                 "dish_name_en": dish.get("name", {}).get("en", ""),
                 "dish_name_zh": dish.get("name", {}).get("zh", ""),
                 "price": dish.get("price"),
-                "options": dish.get("optionGroups"), # Corrected from "options" to "optionGroups"
+                "options": dish.get("optionGroups"),
                 "category_id": category.get("id"),
                 "category_name_en": category.get("name", {}).get("en", ""),
                 "category_name_zh": category.get("name", {}).get("zh", ""),
-                "is_combo": dish.get("is_combo", False), # Carry over the flag
-                "dish_details": dish # Keep full details for search results
+                "is_combo": dish.get("is_combo", False),
+                "dish_details": dish
             })
 
-    # # --- Original Cache Saving (Commented Out for Testing) ---
-    # try:
-    #     with open(cache_file, "w", encoding="utf-8") as f:
-    #         json.dump({"timestamp": datetime.now().isoformat(), "dishes": extracted_dishes}, f, ensure_ascii=False)
-    #     logger.info(f"Saved fresh extracted dishes for portal {portal_id} to cache.")
-    # except IOError as e:
-    #     logger.error(f"Failed to write to cache file {cache_file}: {e}")
+    try:
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump({"timestamp": datetime.now().isoformat(), "dishes": extracted_dishes}, f, ensure_ascii=False)
+        logger.info(f"Saved fresh extracted dishes for portal {portal_id} to cache.")
+    except IOError as e:
+        logger.error(f"Failed to write to cache file {cache_file}: {e}")
 
-    return {"success": True, "message": "Data from Testing Menu", "data": extracted_dishes}
+    return {"success": True, "message": "Data from API with local patches", "data": extracted_dishes}
 
 async def find_dish_by_chinese_name(portal_id: str, chinese_name: str) -> List[Dict[str, Any]]:
     """Public-facing function to find a dish by its Chinese name."""

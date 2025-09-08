@@ -1,0 +1,69 @@
+{
+  "title": "Stateful Combo Ordering Flow Refactor Plan",
+  "objective": "Replace the current brittle, stateless combo ordering function with a robust, stateful architecture to handle multiple, complex combo types and provide a smooth, error-free user experience.",
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Create the Stateful Combo Order Manager",
+      "status": "In Progress",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Create app/handlers/combo_order_manager.py",
+          "description": "This file will contain the ComboOrderManager class, which will manage the state of active combo orders using a dictionary keyed by call_sid.",
+          "status": "Done"
+        }
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "Refactor Tool Definitions and Handlers",
+      "status": "Done",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Modify app/handlers/common_tool_defs.py",
+          "description": "Add a DISHES_ALIASES_EN dictionary. Remove the old CUSTOMIZED_COMBO_FLOW_TOOL_SCHEMA_EN_OPENAI and replace it with START_COMBO_ORDER_TOOL_SCHEMA and PROCESS_COMBO_SELECTION_TOOL_SCHEMA.",
+          "status": "Done"
+        },
+        {
+          "step": 2,
+          "action": "Update app/handlers/english_tool_logic.py",
+          "description": "Import and instantiate the ComboOrderManager. Remove old combo functions (handle_customized_combo_flow, get_next_combo_step).",
+          "status": "Done"
+        },
+        {
+          "step": 3,
+          "action": "Implement new tool handlers in english_tool_logic.py",
+          "description": "Create handle_start_combo_order and handle_process_combo_selection functions to interface with the new manager.",
+          "status": "Done"
+        },
+        {
+          "step": 4,
+          "action": "Update the main function call dispatcher",
+          "description": "Modify the handle_function_call function in english_tool_logic.py to route calls to the new combo handlers.",
+          "status": "Done"
+        }
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "Final Integration and Cleanup",
+      "status": "Done",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Refactor handle_order_summary_thirty_nine_miles_en",
+          "description": "Update the order summary handler to retrieve completed combo details from the ComboOrderManager instead of a simple variation string.",
+          "status": "Done"
+        },
+        {
+          "step": 2,
+          "action": "Final review and testing",
+          "description": "Perform a final review of all changes and ensure the new flow works as expected for both 'Customized Combo' and 'COMBO #1'.",
+          "status": "Done"
+        }
+      ]
+    }
+  ]
+}

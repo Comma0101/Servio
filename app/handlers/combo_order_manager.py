@@ -96,6 +96,18 @@ class ComboOrderManager:
         cleaned = re.sub(r'^\d+(\s?\(pc\))?\.?\s?(lb|ib|in)\.?\s*', '', original_name, flags=re.IGNORECASE).strip()
         return cleaned
 
+    def _clean_prompt_text(self, text: str) -> str:
+        """Cleans up text for more natural-sounding prompts."""
+        if not text:
+            return ""
+        # General replacements
+        text = text.replace("PICK YOUR", "Now choose your")
+        
+        # Universal regex for 'pc' -> 'piece'/'pieces'
+        text = re.sub(r'\(?(\d+)pc\)?', lambda m: f"{m.group(1)} piece" if m.group(1) == '1' else f"{m.group(1)} pieces", text)
+        
+        return text
+
     def user_requests_options(self, user_input: str) -> bool:
         """Check if the user is asking for a list of options."""
         # Expanded list of keywords and phrases
@@ -657,7 +669,7 @@ class ComboOrderManager:
             return {
                 "status": "ITEM_READY_FOR_CART",
                 "action": "PROMPT_FOR_MORE_ITEMS",
-                "message_for_agent": f"Great, I've added the {order['dish_name']} to your order. Would you like to add anything else?",
+                "message_for_agent": f"Great, I've added the {order['dish_name']} to your order. You can add more items, or say 'finish order' to complete your order.",
                 "item_to_add": completed_item
             }
         
@@ -671,30 +683,62 @@ class ComboOrderManager:
 
     def get_next_question(self, call_sid: str) -> Dict[str, Any]:
         if call_sid not in self.active_orders:
+            logger.error(f"get_next_question: No active order found for call_sid {call_sid}")
             return {"message_for_agent": "Sorry, I can't find your order."}
 
         order = self.active_orders[call_sid]
-        is_customized_combo = "customized combo" in order["dish_name"].lower()
+        dish_name_lower = order["dish_name"].lower()
+        is_customized_combo = "customized combo" in dish_name_lower
+        is_fixed_combo = not is_customized_combo
+
+        logger.info(f"get_next_question for {dish_name_lower}: is_fixed_combo={is_fixed_combo}, current_step={order['current_step']}")
+
         option_groups = order["dish_details"].get("optionGroups", [])
         
+        if "choose_one_count" not in order:
+            order["choose_one_count"] = 0
+
         while order["current_step"] < len(option_groups):
             current_group = option_groups[order["current_step"]]
             group_name = current_group.get("name", {}).get("en", "").lower()
+            logger.info(f"Processing group: '{group_name}' at step {order['current_step']}")
 
             if is_customized_combo and ("choose one" in group_name or "half a pound" in group_name):
                 order["current_step"] += 1
                 continue
 
             order["state"] = "AWAITING_OPTION_CHOICE"
-            if not is_customized_combo:
-                options = [self._clean_option_name_for_tts(opt.get("name", {}).get("en")) for opt in current_group.get("options", [])]
-            else:
-                options = [opt.get("name", {}).get("en") for opt in current_group.get("options", [])]
-            options_str = ", ".join(options)
             
-            message = f"For your {order['dish_name']}, what would you like for {current_group.get('name', {}).get('en')}? Your options are: {options_str}."
+            message = ""
+            if is_fixed_combo and "choose one" in group_name and "free" not in group_name:
+                order["choose_one_count"] += 1
+                protein_prompts = {
+                    1: "What would you like to choose for your first protein?",
+                    2: "And for your second protein choice?",
+                    3: "Finally, what's your third protein choice?"
+                }
+                message = protein_prompts.get(order["choose_one_count"], f"Please choose another item.")
+                logger.info(f"Generated protein prompt for count {order['choose_one_count']}: '{message}'")
+            elif is_fixed_combo and "pick 1 free" in group_name:
+                message = "You also get a free item with your combo. Would you like corn, potatoes, or sausage?"
+                logger.info("Generated 'pick 1 free' prompt.")
+            elif is_fixed_combo and "choose one for free" in group_name:
+                message = "You get one more free item. Which would you like?"
+                logger.info("Generated 'choose one for free' prompt.")
             
+            if not message:
+                cleaned_group_name = self._clean_prompt_text(current_group.get("name", {}).get("en"))
+                message = f"For your {order['dish_name']}, what would you like for {cleaned_group_name}?"
+                logger.info(f"Generated default prompt for group '{cleaned_group_name}'")
+
+            options = [self._clean_option_name_for_tts(opt.get("name", {}).get("en")) for opt in current_group.get("options", [])]
+            cleaned_options = [self._clean_prompt_text(opt) for opt in options]
+            options_str = ", ".join(cleaned_options)
+            
+            message += f" Your options are: {options_str}."
+
             order["current_step"] += 1
+            logger.info(f"Returning prompt: '{message}'")
             return {
                 "action": "get_selection",
                 "message_for_agent": message
@@ -702,6 +746,7 @@ class ComboOrderManager:
 
         order["state"] = "AWAITING_FINAL_CONFIRMATION"
         summary = self.get_order_summary(call_sid)
+        logger.info(f"All groups processed. Moving to final confirmation.")
         return {
             "action": "confirm_order",
             "message_for_agent": f"I have your {order['dish_name']} with {summary}. Is that correct?",

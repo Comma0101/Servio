@@ -330,7 +330,10 @@ async def handle_check_menu_item_english(
                     price_en = first_valid_match_details.get("price")
 
                     # Universal cleaning for all option group names before sending to AI
-                    raw_option_groups = first_valid_match_details.get("optionGroups", [])
+                    raw_option_groups = first_valid_match_details.get("optionGroups") # Correctly get potential None
+                    if raw_option_groups is None:
+                        raw_option_groups = [] # Default to empty list if no options exist
+
                     for group in raw_option_groups:
                         if group.get("name") and group.get("name", {}).get("en"):
                             group["name"]["en"] = clean_text_for_tts(group["name"]["en"])

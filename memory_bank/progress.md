@@ -24,7 +24,9 @@ The core infrastructure is complete. Future work will likely focus on:
 
 ## Known Issues
 
-- **`CrashLoopBackOff` on `servio-voice-agent` Pods:** Resolved a critical deployment issue in the new GCP environment. The root cause was the absence of `psql` and `createdb` in the `python:3.11-slim` Docker image, which prevented the database initialization script from running. This was fixed by adding `postgresql-client` to the `Dockerfile`.
+- **Inconsistent Prompts for Fixed Combos (Resolved):** Fixed a logic issue in `app/handlers/combo_order_manager.py` where the agent would provide inconsistent prompts for fixed combo menus. The `_handle_option_selection` function was updated to more accurately identify protein selections based on keywords in the option names, rather than relying on the "choose one" text in the group name.
+- **Combo Order Options Missing in API Call (Resolved):** A critical bug was fixed where combo order options were not being included in the final API call to the `39-Miles` service. The issue was traced to a data flow problem where the order summary was being generated before the combo details were finalized. The fix, implemented in `app/handlers/english_tool_logic.py`, ensures that combo details are fetched from the `ComboOrderManager` by checking for both "completed" and "active" states, making the process more resilient. The fix was validated with new, realistic integration tests.
+- **`CrashLoopBackOff` on `servio-voice-agent` Pods (Resolved):** Resolved a critical deployment issue in the new GCP environment. The root cause was the absence of `psql` and `createdb` in the `python:3.11-slim` Docker image, which prevented the database initialization script from running. This was fixed by adding `postgresql-client` to the `Dockerfile`.
 
 ## Project Evolution
 
