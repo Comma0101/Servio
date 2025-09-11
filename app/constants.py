@@ -12,12 +12,24 @@ OUT_VOICE            = "cmn-CN-Wavenet-A"
 
 # --- Thirty Nine Miles POS System Configuration ---
 THIRTY_NINE_MILES_BASE_URL = "https://sandbox-api-39milespos.azurewebsites.net"
-THIRTY_NINE_MILES_CLIENT_ID = os.getenv("THIRTY_NINE_MILES_CID", "E3CBB3EB-A2CC-4AEE-943E-1AAEB55A9A50") # Renamed env var for clarity
-THIRTY_NINE_MILES_CLIENT_SEC = os.getenv("THIRTY_NINE_MILES_CSEC", "D13E41C5-C43A-4468-927B-7CA551FBE9EB") # Renamed env var for clarity
-THIRTY_NINE_MILES_SHOP_ID = os.getenv("THIRTY_NINE_MILES_SHOP_ID", "7E9BA56D-BA00-45A0-9D6B-09C002A53B41") # Renamed env var
+# THIRTY_NINE_MILES_CLIENT_ID = os.getenv("THIRTY_NINE_MILES_CID", "E3CBB3EB-A2CC-4AEE-943E-1AAEB55A9A50") # Renamed env var for clarity
+# THIRTY_NINE_MILES_CLIENT_SEC = os.getenv("THIRTY_NINE_MILES_CSEC", "D13E41C5-C43A-4468-927B-7CA551FBE9EB") # Renamed env var for clarity
+# THIRTY_NINE_MILES_SHOP_ID = os.getenv("THIRTY_NINE_MILES_SHOP_ID", "7E9BA56D-BA00-45A0-9D6B-09C002A53B41") # Renamed env var
 
-THIRTY_NINE_MILES_PORTAL_ID_TAKEOUT = "06850184"
-THIRTY_NINE_MILES_PORTAL_ID_DINE_IN = "00925518"
+THIRTY_NINE_MILES_CLIENT_ID = os.getenv("THIRTY_NINE_MILES_CID",  "45180F4B-56F4-49CE-929A-61E17CE55829") # Renamed env var for clarity
+THIRTY_NINE_MILES_CLIENT_SEC = os.getenv("THIRTY_NINE_MILES_CSEC", "F8654707-574C-4C6A-B040-53AAE163CFB6") # Renamed env var for clarity
+THIRTY_NINE_MILES_SHOP_ID = os.getenv("THIRTY_NINE_MILES_SHOP_ID", " F0A438D6-CC2F-4A47-B5E4-51C55E5C2687") # Renamed env var
+
+
+
+# THIRTY_NINE_MILES_PORTAL_ID_TAKEOUT = "06850184"
+# THIRTY_NINE_MILES_PORTAL_ID_DINE_IN = "00925518"
+
+
+
+THIRTY_NINE_MILES_PORTAL_ID_TAKEOUT = "14741041"
+THIRTY_NINE_MILES_PORTAL_ID_DINE_IN = "09530785"
+
 
 THIRTY_NINE_MILES_TOKEN_PREFIX: Literal["Bearer", "jwt"] = "Bearer"
 # --- End Thirty Nine Miles POS System Configuration ---
@@ -39,12 +51,12 @@ headers = {
 # Synchronous version of list_catalog_items
 def sync_list_catalog_items():
     url = "https://connect.squareupsandbox.com/v2/catalog/list"
-    response = requests.get(url, headers=headers)
-
-    if response.status_code == 200:
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()  # Raise an exception for bad status codes
         return response.json()
-    else:
-        print(f"Error: {response.status_code}, {response.text}")
+    except requests.exceptions.RequestException as e:
+        print(f"Warning: Could not connect to Square API to fetch menu: {e}")
         return None
 
 

@@ -259,7 +259,10 @@ def _preprocess_menu_data(raw_menu: List[Dict[str, Any]]) -> List[Dict[str, Any]
     """Preprocesses menu data to add helpful flags, like is_combo."""
     for category in raw_menu:
         for item in category.get("items", []):
-            item_name_en = item.get("name", {}).get("en", "").lower()
+            # Safely get the English name, handling cases where 'name' or 'en' might be missing or None
+            name_obj = item.get("name") or {}
+            item_name_en = (name_obj.get("en") or "").lower()
+            
             if "combo" in item_name_en:
                 item["is_combo"] = True
     return raw_menu

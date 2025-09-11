@@ -12,7 +12,7 @@ services:
     environment:
       - DB_HOST=postgres
       - REDIS_HOST=redis
-      - PUBLIC_BASE_URL=https://e43b58bd0a26.ngrok-free.app
+      - PUBLIC_BASE_URL=https://96ba53c9e215.ngrok-free.app
       - ./app:/app/app
     depends_on:
       - postgres
