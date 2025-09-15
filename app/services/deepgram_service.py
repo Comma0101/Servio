@@ -348,7 +348,7 @@ class DeepgramService:
                         logger.error(f"Failed to parse Deepgram message: {message}")
                 elif isinstance(message, bytes):
                     # Process binary messages (audio)
-                    logger.info(f"Received binary message from Deepgram: {len(message)} bytes")
+                    logger.debug(f"Received binary message from Deepgram: {len(message)} bytes")
                     
                     # Pass binary messages to all registered handlers
                     for handler in self.message_handlers:

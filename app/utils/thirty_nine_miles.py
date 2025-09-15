@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import logging
 import time
@@ -205,7 +206,7 @@ async def _find_dish(portal_id: str, name_to_find: str, language: Literal['en', 
             if dish.get("is_combo"):
                 for group in dish.get("dish_details", {}).get("optionGroups", []):
                     for option in group.get("options", []):
-                        option_name = option.get("name", {}).get("en", "").lower()
+                        option_name = (option.get("name") or {}).get("en", "").lower()
                         if search_term_lower in option_name:
                             logger.info(f"Found '{name_to_find}' as an option in combo '{dish.get(name_key)}'.")
                             # Return the parent combo dish
@@ -222,48 +223,49 @@ def _patch_menu_with_local_overrides(
     live_menu: List[Dict[str, Any]], portal_id: str
 ) -> List[Dict[str, Any]]:
     """
-    Overrides items in the live menu with corrected versions from a local JSON file.
-    This is a targeted fix for known API issues, like missing English names for combos.
+    DEPRECATED: This function previously overrode live menu items with a local JSON file.
+    This is no longer needed as data correction is handled in _preprocess_menu_data.
+    The function is kept to avoid breaking the call chain but now does nothing.
     """
-    try:
-        with open("app/utils/testing_menu.json", "r", encoding="utf-8") as f:
-            local_menu_data = json.load(f)
-            # The local menu is a single category object containing items
-            override_items = {
-                item["id"]: item for item in local_menu_data.get("items", [])
-            }
-    except (IOError, json.JSONDecodeError) as e:
-        logger.error(f"Could not load local menu override for portal {portal_id}: {e}")
-        return live_menu  # Return original menu if override fails
+    logger.info("Skipping local menu override; data correction is now automated in preprocessing.")
+    return live_menu
 
-    if not override_items:
-        return live_menu
-
-    logger.warning(f"Patching live menu for portal {portal_id} with local overrides.")
-    patched_menu = []
-    for category in live_menu:
-        patched_items = []
-        for item in category.get("items", []):
-            item_id = item.get("id")
-            if item_id in override_items:
-                logger.info(f"Overriding item '{item_id}' with local version.")
-                patched_items.append(override_items[item_id])
-            else:
-                patched_items.append(item)
-        category["items"] = patched_items
-        patched_menu.append(category)
-
-    return patched_menu
+def _is_primarily_english(text: str) -> bool:
+    """
+    Checks if the text is primarily English characters.
+    """
+    if not text:
+        return True
+    # This regex allows basic Latin alphabet, digits, and common punctuation.
+    # It will not match most characters from other languages like Chinese.
+    return bool(re.fullmatch(r"^[a-zA-Z0-9\s!\"#$%&'()*+,-./:;<=>?@[\\\]^_`{|}~]*$", text))
 
 def _preprocess_menu_data(raw_menu: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Preprocesses menu data to add helpful flags, like is_combo."""
+    """
+    Preprocesses menu data to add helpful flags (like is_combo) and correct
+    known data issues, such as English names misplaced in Chinese fields.
+    """
     for category in raw_menu:
         for item in category.get("items", []):
-            # Safely get the English name, handling cases where 'name' or 'en' might be missing or None
-            name_obj = item.get("name") or {}
-            item_name_en = (name_obj.get("en") or "").lower()
+            name_obj = item.get("name")
+            if not isinstance(name_obj, dict):
+                # If name is not a dict, it's malformed; skip it.
+                continue
+
+            name_en = name_obj.get("en")
+            name_zh = name_obj.get("zh")
+
+            # Data correction: If 'en' is missing but 'zh' contains English text, copy it over.
+            if not name_en and name_zh and _is_primarily_english(name_zh):
+                logger.warning(f"Correcting missing English name for item '{item.get('id')}'. Found English text in 'zh' field: '{name_zh}'")
+                name_obj["en"] = name_zh
+                # Optional: Clear the 'zh' field if it's now redundant, or leave it.
+                # name_obj["zh"] = None 
+
+            # Safely get the English name for combo check after potential correction
+            item_name_en_lower = (name_obj.get("en") or "").lower()
             
-            if "combo" in item_name_en:
+            if "combo" in item_name_en_lower:
                 item["is_combo"] = True
     return raw_menu
 

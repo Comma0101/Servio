@@ -41,4 +41,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 5050
 
 # Run the application
-CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5050"]
+CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5050", "--reload"]

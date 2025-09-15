@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     RESTAURANT_OPENAI_TOOLS: List[Dict[str, Any]] = DEFAULT_OPENAI_TOOLS
     RESTAURANT_TAX_RATE: float = DEFAULT_TAX_RATE
     CHINESE_WELCOME_MESSAGE: str = "您好！欢迎致电食为天餐厅。请您注意，目前我们只支持到店自取和付款。您可以直接开始点餐，或让我通过短信将菜单发给您。如需人工服务，请随时按0。"
-    ENGLISH_WELCOME_MESSAGE: str = "Hello! Welcome to {restaurant_name}."
+    ENGLISH_WELCOME_MESSAGE: str = "Hello! Welcome to {restaurant_name} You can just order by saying can i have tacos."
     # Please note that we currently only support in-store pickup and payment. You can start ordering directly, or I can send you the menu via text message. If you need manual service, please press 0 at any time."
     # Other Configuration
     PUBLIC_BASE_URL: Optional[str] = None

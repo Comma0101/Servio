@@ -1,0 +1,83 @@
+# Menu Overview
+
+This menu is categorized based on how the order processing flow is handled in the code.
+
+## Regular Dishes (Handled by the standard order flow)
+
+### Appetizers & Sides
+- Raw Oyster (6 PCs) - $11.99
+- Raw Oyster (12 PCs) - $23.99
+- Fried bun (8pc) - $6.00
+- Tacos (shrimp or catfish) - $5.99 (Requires meat option)
+- Steamed Rice - $2.50
+- French Fries - $5.99
+- Curly Fries - $6.10
+- Sweet Potato Fries - $7.99
+- Garlic Noodles - $9.99
+- Gumbo (10 oz) - $8.50
+- Clam Chowder - $8.99
+- Gumbo (36 oz) - $20.99
+- Garlic Bread (3pc) - $5.00
+- Egg Roll (6 pc) - $8.99
+- Fried Dumplings (Chicken or Pork) - $8.99
+
+### Fried Baskets (Served with fries)
+- Fried Catfish - $13.99
+- Fried Shrimp (12 pc) - $13.99
+- Fried Calamari - $13.99
+- Fried Oyster (10 pc) - $14.99
+- Fried Chicken Tenders - $13.99
+- Kids Chicken Tenders - $7.99
+- Coconut Shrimp - $13.99
+- Chicken Wings (6 pc) - $10.99
+- Chicken Wings (12 pc) - $17.99
+- Fried Dungeness Legs (8 pc) - $45.00
+- Fried Lobster Tail (1 pc) - $25.00
+
+### Seafood by the Pound (Requires flavor and spice level options)
+- Crawfish (Frozen) - $20.00
+- Shrimp (Head-on) - $18.00
+- Shrimp (Headless) - $20.00
+- Shrimp (Peeled Tail-On) - $24.00
+- King Crab Legs - $75.00
+- Snow Crab Legs - $40.00
+- Dungeness Legs - $45.00
+- Black Mussels - $17.00
+- Green Mussels - $18.00
+- Clams - $18.00
+- Scallops (on the shell) - $22.00
+- Lobster Tail (1 pc) - $21.00
+
+### Drinks
+- Soda (32 oz Coke, Sprite, Fanta, etc.) - $3.00
+- Bottled Tea (Sweet or Unsweet) - $3.00
+- Jarritos - $3.00
+- Bottled Water - $1.25
+- Ice Cream - $3.00
+- Root Beer Float - $4.00
+
+---
+
+## Combo Dishes (Handled by the ComboOrderManager)
+
+### Fried Combos
+- Deep Fryer Combo (Catfish, Shrimp, Calamari, Oysters) - $26.00
+- Customized Fried Combo - $13.99
+
+### Seafood Combos
+- COMBO #1 - $55.00
+- COMBO #2 - $75.00
+- COMBO #3 - $95.00
+- FAMILY COMBO - $110.00
+- Customized Combo - Price Varies
+
+### Special Combos
+- Lunch Special #1 - $30.00
+- Lunch Special #2 - $30.00
+- Lunch Special #3 - $30.00
+- Lunch Special #4 - $30.00
+- Lunch Special #5 - $25.00
+- Lunch Special #6 - $25.00
+- Lunch Special #7 - $25.00
+- Lunch Special #8 - $25.00
+- WEEKEND COMBO SPECIAL - $60.00

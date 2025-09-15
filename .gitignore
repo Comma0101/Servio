@@ -26,3 +26,6 @@ Thumbs.db
 
 # Sensitive credential files
 app/parabolic-wall-459005-u5-55f740733ce9.json
+
+# Cache files
+app/utils/extracted_dishes_cache*.json

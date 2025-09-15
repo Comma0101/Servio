@@ -53,6 +53,18 @@ loggers:
     handlers: [app_handler]
     level: DEBUG
     propagate: False
+  app.services.deepgram_service:
+    handlers: [app_handler]
+    level: WARNING
+    propagate: False
+  app.handlers.deepgram_english_audio_handler:
+    handlers: [app_handler]
+    level: WARNING
+    propagate: False
+  app.handlers.deepgram_english_audio_handler_refactored:
+    handlers: [app_handler]
+    level: WARNING
+    propagate: False
 
 root:
   level: INFO

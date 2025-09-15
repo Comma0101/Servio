@@ -10,8 +10,7 @@ class ComboOrderManager:
     def __init__(self):
         self.active_orders: Dict[str, Dict[str, Any]] = {}
         self.completed_combos: Dict[str, Dict[str, Any]] = {}
-        with open('app/utils/testing_menu.json', 'r') as f:
-            self.menu_data = json.load(f)
+        # The static menu is no longer loaded here.
 
     def add_completed_combo(self, call_sid: str, order: Dict[str, Any]):
         self.completed_combos[call_sid] = order
@@ -23,14 +22,17 @@ class ComboOrderManager:
         """Check if a combo order is currently active for a given call_sid."""
         return call_sid in self.active_orders
 
-    def _get_dish_by_name(self, dish_name: str) -> Optional[Dict[str, Any]]:
-        for item in self.menu_data.get("items", []):
-            if item.get("name", {}).get("en", "").lower() == dish_name.lower():
-                return item
+    def _get_dish_by_name(self, dish_name: str, menu_data: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """Finds a dish by name within the provided live menu data."""
+        for item in menu_data:
+            # The structure from get_extracted_dishes is a flat list of dish objects
+            if item.get("dish_name_en", "").lower() == dish_name.lower():
+                return item.get("dish_details") # Return the full details object
         return None
 
-    def start_combo_order(self, dish_name: str, call_sid: str) -> Dict[str, Any]:
-        dish_details = self._get_dish_by_name(dish_name)
+    def start_combo_order(self, dish_name: str, call_sid: str, live_menu_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Starts a combo order using live menu data."""
+        dish_details = self._get_dish_by_name(dish_name, live_menu_data)
         if not dish_details:
             return {"message_for_agent": f"Sorry, I couldn't find {dish_name} on the menu."}
 
