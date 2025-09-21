@@ -27,8 +27,8 @@ THIRTY_NINE_MILES_SHOP_ID = os.getenv("THIRTY_NINE_MILES_SHOP_ID", " F0A438D6-CC
 
 
 
-THIRTY_NINE_MILES_PORTAL_ID_TAKEOUT = "14741041"
-THIRTY_NINE_MILES_PORTAL_ID_DINE_IN = "09530785"
+THIRTY_NINE_MILES_PORTAL_ID_TAKEOUT = "09530785"
+THIRTY_NINE_MILES_PORTAL_ID_DINE_IN = "14741041"
 
 
 THIRTY_NINE_MILES_TOKEN_PREFIX: Literal["Bearer", "jwt"] = "Bearer"
@@ -79,10 +79,12 @@ CONSTANTS = {
         "         STRICT PROHIBITION: DO NOT call any other function. DO NOT invent or suggest a category (like \"appetizers\" or \"specials\") that was not returned by the tool.\n\n"
         "3.  Handle Specific Requests: \n"
         "     If the user names a specific DISH (e.g., \"I want the Pad Thai\"), you MUST call the `check_menu_item_english` tool to verify it.\n"
-        "     If the user names a specific CATEGORY (e.g., \"Tell me about your soups\"), you MUST call the `list_dishes_by_category_english` tool.\n"
-        "     If the user mentions \"Customized Combo\", you MUST call the `start_combo_order` tool to start the conversational ordering process.\n"
-        "     If the user asks for protein options while ordering a combo, you MUST call the `list_protein_options_for_combo` tool.\n\n"
-        "4a. Combo Ordering Context: When you are in the middle of a combo order (after `start_combo_order` has been called), you MUST treat negative responses like \"no\" or \"that's it\" as an indication to proceed to the next step of the combo, not to end the entire order. You will be guided by the `process_combo_selection` tool.\n\n"
+        "     If the user names a specific CATEGORY (e.g., \"Tell me about your soups\"), you MUST call the `list_dishes_by_category_english` tool.\n\n"
+        "4.  Handle Item Configuration: When the `check_menu_item_english` tool returns a JSON object containing a `\"tool_to_use\"` key, it signals that the user must make a selection. You are now in a guided configuration state.\n"
+        "    a. You will be given a `message_for_agent` containing the next question for the user. You MUST ask this exact question.\n"
+        "    b. The user's next response is their selection. You MUST call the specific tool indicated by the `\"tool_to_use\"` key (e.g., `handle_standard_item_selection` or `handle_combo_item_selection`) with the user's verbatim response.\n"
+        "    c. Continue this guided process, always using the specific tool recommended by the backend, until the item is complete.\n\n"
+        "4a. General Ordering Context: While a user is making selections for an item, you MUST treat negative responses like \"no\" or \"that's it\" as an indication to proceed to the next step of the item configuration, not to end the entire order. You will be guided by the backend tools.\n\n"
         "    a. Announce the `name` of the `optionGroup` to the customer. For example, if the name is \"PICK YOUR FLAVOR\", you should say that.\n"
         "    b. If the group has more than 5 options, do not list them all. Instead, list the first two options, say \"etc.\", and guide the user to the menu they received via SMS. For example: \"This has several options, like 'shrimp', 'crab', etc. You can see the full list on the menu I texted you. What would you like?\"\n"
         "    c. If the group has 5 or fewer options, list all of them for the customer.\n"

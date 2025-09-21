@@ -15,7 +15,9 @@ from app.config import settings
 from app.utils.twilio import end_call, send_sms
 from app.utils.thirty_nine_miles import find_dish_by_english_name, get_extracted_dishes, TextStore, ApiOrderItem, ApiOrderDto, LangCode, add_order as add_thirty_nine_miles_order, MenuProductOptionGroup, MenuProductOption # Added more imports
 from app.constants import THIRTY_NINE_MILES_PORTAL_ID_TAKEOUT # Assuming LIMF uses takeout by default
+from app.handlers.order_manager import order_manager # Import the new unified order manager
 from app.handlers.combo_order_manager import combo_order_manager
+from app.services.call_state_service import set_next_tool, clear_next_tool
 import random # For recommendations
 import re # Added for is_primarily_english
 from typing import List
@@ -25,45 +27,44 @@ import copy
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Centralized cart for storing order items
-call_carts: Dict[str, List[Dict[str, Any]]] = {}
+# The old centralized cart (`call_carts`) is now deprecated and all cart
+# functionality is managed by the singleton `order_manager` instance.
 
 # Comprehensive manual mapping for all protein and size variations to their exact POS names.
 PROTEIN_NAME_MAPPING = {
     "1 lb": {
-        "shrimp head on": "1lb.shrimp head on",
-        "headless shrimp": "1lb.headless shrimp",
-        "peeled tail on": "1lb Peeled Tail On",
-        "fresh crawfish": "1lb.fresh crawfish",
-        "frozen crawfish": "1lb.Frz crawfish",
+        "shrimp head on": "1 Ib. shrimp head on",
+        "headless shrimp": "1 lb. headless shrimp",
+        "peeled tail on": "1  Ib Peeled Tail On",
+        "fresh crawfish": "1 lb. fresh crawfish",
+        "frozen crawfish": "1 lb. Frz crawfish",
         "crawfish": "1 lb crawfish",
-        "lobster tail": "1(pc).Lobster Tail",
-        "king crab legs": "1lb. King Crab Legs 1corn 1 order pot",
-        "snow crab legs": "1lb.Snow Crab Legs",
-        "dungeness legs": "1lb Dungeness Legs",
-        "black mussels": "1lb. Black Mussels",
-        "green mussels": "1lb.Green Mussels",
-        "clams": "1lb. Clams",
-        "scallop": "1lb. Scallop"
+        "lobster tail": "1 （pc). Lobster Tail",
+        "king crab legs": "1 lb. King Crab Legs 1 corn 1 order pot",
+        "snow crab legs": "1 lb. Snow Crab Legs",
+        "dungeness legs": "1 lb. Dungeness Legs",
+        "black mussels": "1 lb. Black Mussels",
+        "green mussels": "1 lb. Green Mussels",
+        "clams": "1 lb. Clams",
+        "scallop": "1 lb. Scallop"
     },
     "0.5 lbs": {
-        "shrimp head on": "half a pound (shrimp head on)",
-        "headless shrimp": "half a pound (headless shrimp)",
-        "peeled tail on": "half a pound Peeled Tail on",
+        "shrimp head on": "half a pound （shrimp   head on)",
+        "headless shrimp": "half a pound（headless shrimp）",
+        "peeled tail on": "half a pound Peeled Tail On",
         "fresh crawfish": "half pound of fresh crawfish",
         "frozen crawfish": "half a pound 0.5 frz crawfish",
-        "black mussels": "half a pound (black mussels)",
-        "green mussels": "half a pound (green mussels)",
-        "clams": "half a pound (clams)",
-        "scallop": "half a pound (scallop)"
+        "black mussels": "half a pound（black mussels）",
+        "green mussels": "half a pound(green mussels )",
+        "clams": "half a pound（clams）",
+        "scallop": "half a pound（scallop）"
     }
 }
 
 def clear_cart(call_sid: str):
-    """Clears the cart for a given call_sid."""
-    if call_sid in call_carts:
-        del call_carts[call_sid]
-        logger.info(f"Cleared cart for call_sid: {call_sid}")
+    """Clears the cart for a given call_sid using the new order manager."""
+    order_manager.clear_cart(call_sid)
+    logger.info(f"Cleared cart for call_sid: {call_sid} via order_manager")
 
 # Define a constant for the mark name
 FINAL_AUDIO_MARK_NAME = "final_message_played"
@@ -74,23 +75,32 @@ def clean_text_for_tts(text: str) -> str:
         return ""
     return text.replace("*", "").strip()
 
+def _get_english_name(name_dict: Dict[str, Any], default: str = "") -> str:
+    """
+    Safely retrieves the English name from a name dictionary,
+    falling back to the Chinese name if the English one is null or empty.
+    This is a specific workaround for the current menu data source.
+    """
+    if not name_dict:
+        return default
+    name_en = name_dict.get("en")
+    if name_en and name_en.strip():
+        return name_en
+    name_zh = name_dict.get("zh")
+    if name_zh and name_zh.strip():
+        return name_zh
+    return default
+
 def is_primarily_english(text: str) -> bool:
     """
     Checks if the text is primarily English characters, allowing spaces,
     common punctuation, and numbers.
-    Returns False if it finds characters outside the typical English set
-    (e.g., Chinese, Japanese, Korean characters).
     """
     if not text:
-        return True # Empty string is fine
-    # This regex allows:
-    # - Basic Latin alphabet (a-z, A-Z)
-    # - Digits (0-9)
-    # - Common punctuation and symbols: space, ! " # $ % & ' ( ) * + , - . / : ; < = > ? @ [ \ ] ^ _ ` { | } ~
-    # It will NOT match extended Latin characters (like é, ü) or CJK characters.
-    if re.fullmatch(r"^[a-zA-Z0-9\s!\"#$%&'()*+,-./:;<=>?@[\\\]^_`{|}~]*$", text):
         return True
-    return False
+    # This regex allows basic Latin alphabet, digits, and common punctuation.
+    # It will not match most characters from other languages.
+    return bool(re.fullmatch(r"^[a-zA-Z0-9\s!\"#$%&'()*+,-./:;<=>?@[\\\]^_`{|}~]*$", text))
 
 async def handle_function_call(
     function_request: Dict[str, Any],
@@ -241,35 +251,16 @@ async def handle_function_call(
                 client_id,
                 call_sid
             )
-        elif function_name == "start_combo_order":
-            await handle_start_combo_order(
+        elif function_name == "handle_standard_item_selection":
+            await handle_standard_item_selection(
                 function_call_id,
                 function_name,
                 input_data,
-                deepgram_service,
-                call_sid,
-                client_id # Pass client_id
-            )
-        elif function_name == "process_combo_selection":
-            await handle_process_combo_selection(
-                function_call_id,
-                function_name,
-                input_data,
-                deepgram_service,
-                call_sid,
-                websocket,
-                caller_phone,
-                client_id
-            )
-        elif function_name == "list_protein_options_for_combo":
-            await handle_list_protein_options_for_combo(
-                function_call_id,
-                function_name,
                 deepgram_service,
                 call_sid
             )
-        elif function_name == "add_item_to_cart":
-            await handle_add_item_to_cart(
+        elif function_name == "handle_combo_item_selection":
+            await handle_combo_item_selection(
                 function_call_id,
                 function_name,
                 input_data,
@@ -324,18 +315,18 @@ async def handle_check_menu_item_english(
             found_dishes_from_pos = await find_dish_by_english_name(portal_id, dish_name_en_query)
             
             if found_dishes_from_pos:
-                # Filter for primarily English names before considering them "found" for the English agent
-                valid_english_matches = []
+                # Filter for dishes that have a valid English or fallback Chinese name.
+                valid_matches = []
                 for dish_data in found_dishes_from_pos:
-                    name_en_from_menu = dish_data.get("dish_details", {}).get("name", {}).get("en")
-                    if name_en_from_menu and is_primarily_english(name_en_from_menu):
-                        valid_english_matches.append(dish_data)
+                    dish_details = dish_data.get("dish_details", {})
+                    name_to_check = _get_english_name(dish_details.get("name"))
+                    if name_to_check and is_primarily_english(name_to_check):
+                        valid_matches.append(dish_data)
                 
-                if valid_english_matches:
-                    # For simplicity, take the first valid English match if multiple exist after filtering
-                    # A more complex logic could handle ambiguous English matches
-                    first_valid_match_details = valid_english_matches[0].get("dish_details", {})
-                    name_en_to_use = first_valid_match_details.get("name", {}).get("en", dish_name_en_query)
+                if valid_matches:
+                    # For simplicity, take the first valid match.
+                    first_valid_match_details = valid_matches[0].get("dish_details", {})
+                    name_en_to_use = _get_english_name(first_valid_match_details.get("name"), dish_name_en_query)
                     price_en = first_valid_match_details.get("price")
 
                     # Universal cleaning for all option group names before sending to AI
@@ -349,74 +340,53 @@ async def handle_check_menu_item_english(
 
                     # If the item has no required options and is not a combo, add it directly to the cart.
                     has_required_options = any(group.get("isRequired") for group in raw_option_groups)
-                    is_combo = first_valid_match_details.get("is_combo")
-
-                    if not has_required_options and not is_combo:
+                    
+                    if not has_required_options:
                         quantity = input_data.get("quantity", 1)
-                        _add_item_to_cart_logic(call_sid, name_en_to_use, quantity, {})
+                        order_manager.add_item_to_cart(call_sid, name_en_to_use, quantity, {})
                         output_payload["added_to_cart"] = True
                         output_payload["message_for_agent"] = f"Okay, I've added {quantity} {name_en_to_use} to your order."
+                    # --- START OF NEW LOGIC ---
+                    # Check if the item is the special "Customized Combo"
+                    elif "customized combo" in name_en_to_use.lower():
+                        # Fetch the full menu to pass to the specialized manager
+                        live_menu_response = await get_extracted_dishes(portal_id)
+                        live_menu_data = live_menu_response.get("data", [])
+                        
+                        # Use the specialized combo manager for a better conversational start
+                        response_from_manager = combo_order_manager.start_combo_order(name_en_to_use, call_sid, live_menu_data)
+                        
+                        output_payload["message_for_agent"] = response_from_manager.get("message_for_agent")
+                        output_payload["tool_to_use"] = "handle_combo_item_selection"
+                        await set_next_tool(call_sid, "handle_combo_item_selection")
+                    # --- END OF NEW LOGIC ---
+                    else:
+                        # For all other items with options, use the generic manager
+                        quantity = input_data.get("quantity", 1)
+                        response_from_manager = order_manager.start_item(first_valid_match_details, quantity, call_sid)
+                        output_payload["message_for_agent"] = response_from_manager.get("message_for_agent")
+                        output_payload["tool_to_use"] = "handle_standard_item_selection"
 
                     output_payload["found"] = True
-                    output_payload["dish_details"] = {
-                        "name_en": name_en_to_use,
-                        # "name_zh": first_valid_match_details.get("name", {}).get("zh"), # Not needed for EN agent
-                        "price": price_en,
-                        "options": raw_option_groups # Use the now-cleaned groups
-                    }
-                    if has_required_options:
-                        is_combo = any(combo in name_en_to_use.lower() for combo in KNOWN_COMBO_ITEMS)
-                        if is_combo:
-                            output_payload["message_for_agent"] = f"The item '{name_en_to_use}' is a combo. Please use the 'start_combo_order' tool to begin the order."
-                        else:
-                            output_payload["tool_to_use"] = "add_item_to_cart"
-                            required_groups = [
-                                group.get('name', {}).get('en') or group.get('name', {}).get('zh')
-                                for group in raw_option_groups if group.get('isRequired')
-                            ]
-                            required_groups = [group for group in required_groups if group] # Filter out None
-
-                            if required_groups:
-                                primary_required_group_name = required_groups[0]
-                                primary_group_details = next((g for g in raw_option_groups if (g.get('name', {}).get('en') or g.get('name', {}).get('zh')) == primary_required_group_name), None)
-                                
-                                if primary_group_details:
-                                    options_list = [opt['name'].get('en') or opt['name'].get('zh') for opt in primary_group_details.get('options', [])]
-                                    options_list = [opt for opt in options_list if opt] # Filter out any remaining None values
-                                    options_str = ", ".join(options_list)
-                                    # This message is now a direct question for the user, guiding the agent's next turn.
-                                    output_payload["message_for_agent"] = f"Okay, {name_en_to_use}. What kind of {primary_required_group_name.lower()} would you like? Your options are: {options_str}."
-                                else:
-                                    # Fallback if menu data is inconsistent
-                                    output_payload["message_for_agent"] = f"The item '{name_en_to_use}' has required options. Please specify your choice for {primary_required_group_name.lower()}."
-                            else:
-                                # Fallback if isRequired is true but no group name is found
-                                output_payload["message_for_agent"] = f"The item '{name_en_to_use}' has required options. Please make a selection."
-                    else:
-                        output_payload["message_for_agent"] = f"Dish '{name_en_to_use}' is available."
-                        if price_en is not None:
-                            output_payload["message_for_agent"] += f" Price: ${price_en:.2f}."
-                        if first_valid_match_details.get("is_combo"):
-                            output_payload["message_for_agent"] += " This is a combo item."
                     
                     output_payload["message_for_agent"] = clean_text_for_tts(output_payload["message_for_agent"])
-                    # Simplified ambiguity handling: if more than one *valid English* match, flag it.
-                    if len(valid_english_matches) > 1:
+                    # Simplified ambiguity handling: if more than one valid match, flag it.
+                    if len(valid_matches) > 1:
                         output_payload["is_ambiguous"] = True
-                        # Provide only English names for ambiguous matches
-                        ambiguous_english_names = [
-                            match.get("dish_details", {}).get("name", {}).get("en") 
-                            for match in valid_english_matches 
-                            if match.get("dish_details", {}).get("name", {}).get("en")
+                        ambiguous_names = [
+                            _get_english_name(match.get("dish_details", {}).get("name"))
+                            for match in valid_matches
                         ]
-                        output_payload["ambiguous_matches_en"] = ambiguous_english_names
-                        output_payload["message_for_agent"] = f"Found multiple items for '{dish_name_en_query}'. Options: {', '.join(ambiguous_english_names)}. Please clarify."
+                        # Filter out any empty names that might have slipped through
+                        ambiguous_names = [name for name in ambiguous_names if name]
+                        output_payload["ambiguous_matches_en"] = ambiguous_names
+                        output_payload["message_for_agent"] = f"Found multiple items for '{dish_name_en_query}'. Options: {', '.join(ambiguous_names)}. Please clarify."
                     else:
                         output_payload["is_ambiguous"] = False
-                    logger.info(f"Dish '{dish_name_en_query}' (matched English: '{name_en_to_use}') found in portal {portal_id}.")
+                    logger.info(f"Dish '{dish_name_en_query}' (matched to '{name_en_to_use}') found in portal {portal_id}.")
                 else:
-                    logger.info(f"Dish '{dish_name_en_query}' found in POS, but no valid English name version available. Treating as not found for English agent.")
-                    output_payload["message_for_agent"] = f"Sorry, I couldn't find an English entry for '{dish_name_en_query}' on the menu."
+                    logger.info(f"Dish '{dish_name_en_query}' found in POS, but no valid English or fallback name available. Treating as not found.")
+                    output_payload["message_for_agent"] = f"Sorry, I couldn't find an entry for '{dish_name_en_query}' on the menu."
             else:
                 logger.info(f"Dish '{dish_name_en_query}' not found in portal {portal_id}.")
                 # output_payload["message_for_agent"] is already "Dish not found."
@@ -448,86 +418,88 @@ async def handle_check_menu_item_english(
     logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}): {response['content']}")
 
 
-def _add_item_to_cart_logic(
-    call_sid: str,
-    item_name: str,
-    quantity: int,
-    options: List[str]
-):
-    """Smarter logic to add items and append options to the cart."""
-    if not item_name:
-        logger.error("No item name provided to add_item_to_cart.")
-        return
-
-    if call_sid not in call_carts:
-        call_carts[call_sid] = []
-
-    # Find an existing item by name. For simple items, we assume one entry per item name.
-    existing_item = next((item for item in call_carts[call_sid] if item.get("name") == item_name), None)
-    
-    if existing_item:
-        # Item already exists, update it.
-        if quantity > 1: # The default is 1, so > 1 means user specified more.
-             existing_item["quantity"] += quantity
-        
-        # Append new options, avoiding duplicates.
-        if "options" not in existing_item or not isinstance(existing_item["options"], list):
-            existing_item["options"] = [] # Initialize if missing or wrong type
-        
-        for opt in options:
-            if opt not in existing_item["options"]:
-                existing_item["options"].append(opt)
-        
-        logger.info(f"Updated item '{item_name}' in cart for call {call_sid}. New options: {existing_item['options']}")
-    else:
-        # Item is new, add it to the cart.
-        cart_item = {
-            "name": item_name,
-            "quantity": quantity,
-            "options": options # Store the list of options
-        }
-        call_carts[call_sid].append(cart_item)
-        logger.info(f"Added new item '{item_name}' with options {options} to cart for call {call_sid}.")
-
-
-async def handle_add_item_to_cart(
+async def handle_standard_item_selection(
     function_call_id: str,
     function_name: str,
     input_data: Dict[str, Any],
     deepgram_service,
     call_sid: Optional[str]
 ):
-    """Handles adding a simple item with options to the cart."""
-    item_name = input_data.get("item_name")
-    quantity = input_data.get("quantity", 1)
-    options_input = input_data.get("options", [])
+    """
+    Handles the user's selection for a standard item's options using the generic OrderManager.
+    """
+    user_input = input_data.get("user_input")
+    logger.info(f"Handling {function_name} with user_input '{user_input}' for a standard item (CallSid: {call_sid})")
 
-    # Ensure options are always a list, even if a single string is passed.
-    if isinstance(options_input, str):
-        options = [options_input]
-    elif isinstance(options_input, list):
-        options = options_input
+    if not user_input:
+        response_payload = {
+            "status": "REPROMPT",
+            "message_for_agent": "I'm sorry, I didn't catch that. Could you please repeat your selection?"
+        }
     else:
-        options = []
-    
-    logger.info(f"Handling add_item_to_cart for '{item_name}' with options {options} (CallSid: {call_sid})")
-    _add_item_to_cart_logic(call_sid, item_name, quantity, options)
-
-    # Create a more descriptive message for the agent
-    options_str = f" with {', '.join(options)}" if options else ""
-    output_payload = {
-        "status": "SUCCESS",
-        "message_for_agent": f"I've added {quantity} {item_name}{options_str} to the order.",
-        "current_cart": call_carts.get(call_sid, []) # Also return the current cart state
-    }
+        logger.info(f"Routing selection to generic OrderManager for call_sid: {call_sid}")
+        response_payload = order_manager.process_selection(user_input, call_sid)
 
     response = {
         "type": "FunctionCallResponse",
         "id": function_call_id,
         "name": function_name,
-        "content": json.dumps(output_payload)
+        "content": json.dumps(response_payload)
     }
     await deepgram_service.send_json(response)
+    logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}): {response['content']}")
+
+
+async def handle_combo_item_selection(
+    function_call_id: str,
+    function_name: str,
+    input_data: Dict[str, Any],
+    deepgram_service,
+    call_sid: Optional[str]
+):
+    """
+    Handles the user's selection for a combo item's options using the ComboOrderManager.
+    """
+    user_input = input_data.get("user_input")
+    logger.info(f"Handling {function_name} with user_input '{user_input}' for a combo item (CallSid: {call_sid})")
+
+    if not user_input:
+        response_payload = {
+            "status": "REPROMPT",
+            "message_for_agent": "I'm sorry, I didn't catch that. Could you please repeat your selection?"
+        }
+    else:
+        logger.info(f"Routing selection to ComboOrderManager for call_sid: {call_sid}")
+        response_payload = combo_order_manager.process_selection(user_input, call_sid)
+
+        # Check if the combo has been finalized
+        if response_payload.get("status") == "ITEM_READY_FOR_CART":
+            item_to_add = response_payload.get("item_to_add")
+            if item_to_add:
+                # Add the completed combo to the main cart
+                order_manager.add_item_to_cart(
+                    call_sid,
+                    item_to_add.get("name"),
+                    item_to_add.get("quantity", 1),
+                    item_to_add.get("options", {})
+                )
+                logger.info(f"Moved completed combo '{item_to_add.get('name')}' to main cart for call {call_sid}.")
+            
+            # Explicitly clear the state override now that the combo flow is complete
+            await clear_next_tool(call_sid)
+        
+        # If the combo flow is still ongoing, perpetuate the state override
+        elif response_payload.get("tool_to_use"):
+            await set_next_tool(call_sid, response_payload["tool_to_use"])
+
+    response = {
+        "type": "FunctionCallResponse",
+        "id": function_call_id,
+        "name": function_name,
+        "content": json.dumps(response_payload)
+    }
+    await deepgram_service.send_json(response)
+    logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}): {response['content']}")
 
 
 async def handle_list_dishes_by_category_english(
@@ -564,20 +536,21 @@ async def handle_list_dishes_by_category_english(
                 ]
                 
                 if category_dishes:
-                    valid_english_dishes = []
+                    valid_dishes = []
                     for dish_detail in category_dishes:
-                        name_en = dish_detail.get("dish_name_en")
-                        if name_en and is_primarily_english(name_en):
-                            valid_english_dishes.append({
-                                "name_en": name_en,
+                        # The get_extracted_dishes function already provides a direct dish_name_en
+                        name_to_check = dish_detail.get("dish_name_en")
+                        if name_to_check and is_primarily_english(name_to_check):
+                            valid_dishes.append({
+                                "name_en": name_to_check,
                                 "price": dish_detail.get("price")
                             })
                     
-                    if valid_english_dishes:
-                        output_payload["dishes"] = valid_english_dishes
-                        dish_names_str = ", ".join([d["name_en"] for d in valid_english_dishes])
+                    if valid_dishes:
+                        output_payload["dishes"] = valid_dishes
+                        dish_names_str = ", ".join([d["name_en"] for d in valid_dishes])
                         output_payload["message_for_agent"] = f"In the '{category_name_en}' category, we have: {dish_names_str}."
-                        logger.info(f"Found {len(valid_english_dishes)} English dishes for category '{category_name_en}' in portal {portal_id}.")
+                        logger.info(f"Found {len(valid_dishes)} dishes for category '{category_name_en}' in portal {portal_id}.")
                     else:
                         logger.info(f"Found dishes for category '{category_name_en}', but none with valid English names.")
                         output_payload["message_for_agent"] = f"Sorry, I couldn't find any English named dishes in the '{category_name_en}' category."
@@ -639,20 +612,20 @@ async def handle_recommend_dishes_english(
                     output_payload["message_for_agent"] = f"Sorry, I couldn't find any dishes in the '{category_name_en}' category to recommend."
             
             # Further filter candidates for valid English names
-            valid_english_candidate_dishes = []
+            valid_candidate_dishes = []
             if candidate_dishes_for_recommendation:
                 for dish_detail in candidate_dishes_for_recommendation:
-                    name_en = dish_detail.get("dish_name_en")
-                    if name_en and is_primarily_english(name_en):
-                        valid_english_candidate_dishes.append(dish_detail)
+                    name_to_check = dish_detail.get("dish_name_en")
+                    if name_to_check and is_primarily_english(name_to_check):
+                        valid_candidate_dishes.append(dish_detail)
             
-            if valid_english_candidate_dishes:
-                num_to_recommend = min(count, len(valid_english_candidate_dishes))
+            if valid_candidate_dishes:
+                num_to_recommend = min(count, len(valid_candidate_dishes))
                 num_to_recommend = max(0, num_to_recommend) # Ensure not negative
                 
                 recommended_dishes_details = []
                 if num_to_recommend > 0:
-                    recommended_dishes_details = random.sample(valid_english_candidate_dishes, num_to_recommend)
+                    recommended_dishes_details = random.sample(valid_candidate_dishes, num_to_recommend)
                 
                 dishes_to_return = []
                 valid_recommended_dish_names = []
@@ -819,181 +792,7 @@ async def handle_send_menu_link(
     logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}): {response['content']}")
 
 
-KNOWN_COMBO_ITEMS = ["customized combo", "combo #1", "combo #2", "combo #3"]
-
-async def handle_start_combo_order(
-    function_call_id: str,
-    function_name: str,
-    input_data: Dict[str, Any],
-    deepgram_service,
-    call_sid: Optional[str],
-    client_id: Optional[str] # Added client_id to determine the portal
-):
-    """Handles the start_combo_order function call using live menu data."""
-    dish_name = input_data.get("dish_name")
-    logger.info(f"Handling {function_name} for '{dish_name}' (CallSid: {call_sid})")
-
-    # Check if the dish_name is a known combo item
-    if not any(combo in dish_name.lower() for combo in KNOWN_COMBO_ITEMS):
-        logger.warning(f"'{dish_name}' is not a known combo item. Rejecting start_combo_order call.")
-        output_payload = {
-            "status": "REJECTED",
-            "message_for_agent": f"The item '{dish_name}' is not a combo. To order it, ask the user for any required options and then use the 'add_item_to_cart' tool."
-        }
-        response = {
-            "type": "FunctionCallResponse",
-            "id": function_call_id,
-            "name": function_name,
-            "content": json.dumps(output_payload)
-        }
-        await deepgram_service.send_json(response)
-        return
-
-    portal_id = None
-    if client_id == "LIMF":
-        portal_id = THIRTY_NINE_MILES_PORTAL_ID_TAKEOUT
-    
-    if not portal_id:
-        logger.error(f"Cannot start combo order: Portal ID not found for client_id: {client_id}")
-        output_payload = {"message_for_agent": "Internal configuration error: Cannot identify the restaurant."}
-    else:
-        # Fetch the live menu data
-        menu_response = await get_extracted_dishes(portal_id)
-        if menu_response and menu_response.get("success"):
-            live_menu_data = menu_response.get("data", [])
-            output_payload = combo_order_manager.start_combo_order(dish_name, call_sid, live_menu_data)
-        else:
-            logger.error(f"Failed to fetch menu for combo order for portal {portal_id}")
-            output_payload = {"message_for_agent": "Sorry, I'm having trouble accessing the menu right now."}
-
-    response = {
-        "type": "FunctionCallResponse",
-        "id": function_call_id,
-        "name": function_name,
-        "content": json.dumps(output_payload)
-    }
-    await deepgram_service.send_json(response)
-    logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}): {response['content']}")
-
-async def handle_list_protein_options_for_combo(
-    function_call_id: str,
-    function_name: str,
-    deepgram_service,
-    call_sid: Optional[str]
-):
-    """Handles the list_protein_options_for_combo function call."""
-    logger.info(f"Handling {function_name} (CallSid: {call_sid})")
-
-    # This function now acts as a simple bridge to the combo order manager
-    output_payload = combo_order_manager.process_selection("list options", call_sid)
-
-    response = {
-        "type": "FunctionCallResponse",
-        "id": function_call_id,
-        "name": function_name,
-        "content": json.dumps(output_payload)
-    }
-    await deepgram_service.send_json(response)
-    logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}): {response['content']}")
-
-async def handle_process_combo_selection(
-    function_call_id: str,
-    function_name: str,
-    input_data: Dict[str, Any],
-    deepgram_service,
-    call_sid: Optional[str],
-    websocket: WebSocket,
-    caller_phone: Optional[str],
-    client_id: Optional[str]
-):
-    """Handles the process_combo_selection function call."""
-    user_input = input_data.get("user_input")
-    is_done_adding = input_data.get("is_done_adding", False)
-
-    logger.info(f"Handling {function_name} with user_input '{user_input}', is_done_adding: {is_done_adding} (CallSid: {call_sid})")
-
-    # --- GUARDRAIL ---
-    # This tool should only be called when a combo order is active.
-    if not combo_order_manager.is_active(call_sid):
-        logger.warning(f"Rejected 'process_combo_selection' call for call_sid: {call_sid} because no combo order is active.")
-        output_payload = {
-            "status": "REJECTED",
-            "message_for_agent": "Error: 'process_combo_selection' was called, but there is no active combo order. This tool is ONLY for selecting options for a combo that has been started with 'start_combo_order'. For regular items, use 'add_item_to_cart' with the user's selection as an option."
-        }
-        response = {
-            "type": "FunctionCallResponse",
-            "id": function_call_id,
-            "name": function_name,
-            "content": json.dumps(output_payload)
-        }
-        await deepgram_service.send_json(response)
-        return
-
-    output_payload = combo_order_manager.process_selection(user_input, call_sid)
-
-    if output_payload.get("status") == "ITEM_READY_FOR_CART":
-        # The combo is finalized. Add the item to the main cart.
-        item_to_add = output_payload.get("item_to_add")
-        if item_to_add:
-            if call_sid not in call_carts:
-                call_carts[call_sid] = []
-            call_carts[call_sid].append(item_to_add)
-            logger.info(f"Added finalized combo to cart for call {call_sid}: {item_to_add.get('name')}")
-
-        # Create a clean response for the agent that only contains the message to speak,
-        # without any confusing internal state, to prevent the looping bug.
-        response_content = json.dumps({
-            "message_for_agent": output_payload.get("message_for_agent")
-        })
-    else:
-        # For all other in-progress combo steps, pass the full payload with state info.
-        response_content = json.dumps(output_payload)
-
-    response = {
-        "type": "FunctionCallResponse",
-        "id": function_call_id,
-        "name": function_name,
-        "content": response_content  # Use the processed response_content
-    }
-    await deepgram_service.send_json(response)
-    logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}): {response['content']}")
-
-async def handle_send_combo_menu_sms(
-    caller_phone: Optional[str],
-    client_id: Optional[str],
-    call_sid: Optional[str]
-):
-    """Sends the combo menu via SMS."""
-    logger.info(f"Handling send_combo_menu_sms for client '{client_id}' to caller '{caller_phone}' (CallSid: {call_sid})")
-
-    if not caller_phone:
-        logger.warning(f"Cannot send combo menu SMS for call {call_sid}: caller_phone is missing.")
-        return
-    if not client_id:
-        logger.error(f"Cannot send combo menu SMS for call {call_sid}: client_id is missing.")
-        return
-
-    try:
-        from app.utils.constants import get_restaurant_config
-        config = get_restaurant_config(client_id)
-        menu_url = config.get("MENU_URL")
-        restaurant_name = config.get("RESTAURANT_NAME", "our restaurant")
-
-        if menu_url:
-            sms_body = f"Here are the protein options for the Customized Combo at {restaurant_name}: {menu_url}"
-            
-            import functools
-            loop = asyncio.get_event_loop()
-            sms_task = functools.partial(send_sms, caller_phone, sms_body, client_id)
-            loop.run_in_executor(None, sms_task)
-            
-            logger.info(f"Scheduled SMS with combo menu link to {caller_phone} for client {client_id}.")
-        else:
-            logger.error(f"MENU_URL not found in config for client_id: {client_id}")
-
-    except Exception as e:
-        logger.error(f"Error processing send_combo_menu_sms for call {call_sid}: {e}", exc_info=True)
-
+# The handle_send_combo_menu_sms function is now obsolete and has been removed.
 # The _incorrectly_named_handle_order_summary_actually_list_dishes function is removed.
 
 # Corrected signature and new function for Thirty Nine Miles English Order Summary
@@ -1014,15 +813,15 @@ async def handle_order_summary_thirty_nine_miles_en(
     logger.info(f"Input data: {json.dumps(input_data)}")
 
     # --- STATE MANAGEMENT GATEKEEPER ---
-    if combo_order_manager.is_active(call_sid):
-        logger.warning(f"Rejected 'order_summary' call for call_sid: {call_sid} because a combo order is active.")
+    if order_manager.is_active(call_sid):
+        logger.warning(f"Rejected 'order_summary' call for call_sid: {call_sid} because an item configuration is active.")
         response = {
             "type": "FunctionCallResponse",
             "id": function_call_id,
             "name": function_name,
             "content": json.dumps({
                 "status": "REJECTED",
-                "message_for_agent": "A combo order is in progress. You must use the 'process_combo_selection' tool to continue guiding the user."
+                "message_for_agent": "An item is currently being configured. You must use the 'process_order_selection' tool to continue guiding the user."
             })
         }
         await deepgram_service.send_json(response)
@@ -1033,12 +832,17 @@ async def handle_order_summary_thirty_nine_miles_en(
     summary_status = input_data.get("summary")
 
     # --- SINGLE SOURCE OF TRUTH: THE CART ---
-    # The AI's item list is now IGNORED. We only use items from the cart.
-    if call_sid in call_carts and call_carts[call_sid]:
-        logger.info(f"Using items from the cart for call_sid: {call_sid} as the source of truth.")
-        ai_items = call_carts[call_sid]
+    # The AI's item list is IGNORED. We only use items from the order_manager's cart.
+    cart_items = order_manager.get_cart(call_sid)
+    if cart_items:
+        logger.info(f"Using {len(cart_items)} items from the order_manager cart for call_sid: {call_sid} as the source of truth.")
+        ai_items = cart_items # Use the cart items, not the AI's potentially stale list
     else:
-        logger.warning(f"Cart is empty for call_sid: {call_sid}. Proceeding with AI-provided items, but this may be incorrect.")
+        logger.warning(f"Cart is empty for call_sid: {call_sid}. The AI provided {len(ai_items)} items, but this may be incorrect if items were added previously.")
+        # If the cart is empty, we proceed with what the AI sent, but this is a potential state mismatch.
+        if not ai_items:
+             response_content_payload = {"status": "ERROR", "order_placed": False, "message_for_agent": "Your order is empty. Please add items to your cart before checking out."}
+             raise ValueError("Cart is empty and AI provided no items for order summary.")
 
     call_id_for_db = call_sid or f"unknown_call_{int(time.time())}"
     
@@ -1105,27 +909,34 @@ async def handle_order_summary_thirty_nine_miles_en(
                     continue
 
                 for group in option_groups:
+                    # Skip validation for Customized Combo as it has its own logic
+                    if "customized combo" in item_name.lower():
+                        continue
+
                     if group.get("isRequired"):
-                        group_name_en = group.get("name", {}).get("en")
+                        group_name_en = _get_english_name(group.get("name", {}))
                         display_group_name = f"'{group_name_en}'" if group_name_en else "a required selection (e.g., protein)"
                         
                         item_options = item.get("options", {})
                         has_selection_for_group = False
                         
-                        # Get all possible option names for the current required group
-                        possible_option_names = {opt.get("name", {}).get("en") for opt in group.get("options", [])}
+                        # Get all possible option names for the current required group, using the safe getter
+                        possible_option_names = {_get_english_name(opt.get("name", {})) for opt in group.get("options", [])}
+                        # Filter out empty strings that might result from the safe getter
+                        possible_option_names = {name for name in possible_option_names if name}
 
-                        # Check if any of the item's selected options match the possible options for the required group
-                        if isinstance(item_options, dict): # For combos
-                            # Check if the group name is a key in the selections
+                        # The cart stores selections as {group_name: selection_name}.
+                        # We need to check if the group_name from the menu exists as a key in the item's options.
+                        if isinstance(item_options, dict):
                             if group_name_en in item_options:
-                                has_selection_for_group = True
-                            # Also check fixed_combo_selections for fixed combos
-                            elif 'fixed_combo_selections' in item_options:
-                                selected_options = item_options['fixed_combo_selections']
-                                if any(sel in possible_option_names for sel in selected_options):
+                                # Now, also validate that the selected value is a valid option for that group.
+                                selected_value = item_options[group_name_en]
+                                if selected_value in possible_option_names:
                                     has_selection_for_group = True
-
+                                else:
+                                    logger.warning(f"Validation mismatch: Selection '{selected_value}' for group '{group_name_en}' is not in the list of possible options: {possible_option_names}")
+                        
+                        # This block handles older or different data formats, kept for safety but the primary logic is above.
                         elif isinstance(item_options, list): # For simple items with options
                             if any(opt in possible_option_names for opt in item_options):
                                 has_selection_for_group = True
@@ -1265,33 +1076,45 @@ async def handle_order_summary_thirty_nine_miles_en(
                     product_options_for_pos = reconstructed_option_groups
                     logger.info(f"Reconstructed {len(product_options_for_pos)} option groups for fixed-price combo. Final calculated price: {item_price}")
 
-                # Case 3: Non-combo item with a list of simple option strings
-                elif isinstance(ai_options, list) and ai_options:
-                    logger.info(f"Processing options for non-combo item: {item_name_en}")
+                # Case 3: Non-combo item with a dictionary of {group_name: selection}
+                elif isinstance(ai_options, dict) and ai_options:
+                    logger.info(f"Processing options for non-combo item with dict options: {item_name_en}")
                     reconstructed_option_groups = []
                     item_price = float(pos_dish_details.get("price", 0.0)) # Start with base price
 
-                    for selected_option_str in ai_options:
-                        found_match = False
-                        for group in all_option_groups_from_menu:
-                            for option in group.get("options", []):
-                                if option.get("name", {}).get("en", "").lower() == str(selected_option_str).lower():
-                                    reconstructed_option_groups.append(MenuProductOptionGroup(
-                                        name=TextStore(**group.get("name", {})),
-                                        options=[MenuProductOption(**option)]
-                                    ))
-                                    item_price += option.get("adjustPrice", 0.0)
-                                    found_match = True
-                                    break
-                            if found_match:
-                                break
+                    for selection_key, selected_value in ai_options.items():
+                        target_group = next((g for g in all_option_groups_from_menu if _get_english_name(g.get("name", {})).strip().lower() == selection_key.strip().lower()), None)
+                        
+                        if not target_group:
+                            logger.warning(f"Could not find option group '{selection_key}' for item '{item_name_en}'.")
+                            continue
+
+                        found_option = next((opt for opt in target_group.get("options", []) if _get_english_name(opt.get("name", {})).strip().lower() == str(selected_value).strip().lower()), None)
+
+                        if found_option:
+                            # Ensure the names sent to the POS have the English fallback applied.
+                            group_name_for_pos = TextStore(en=_get_english_name(target_group.get("name", {})), zh=target_group.get("name", {}).get("zh"))
+                            option_name_for_pos = TextStore(en=_get_english_name(found_option.get("name", {})), zh=found_option.get("name", {}).get("zh"))
+                            
+                            # Create a copy of the found option to avoid modifying the original menu data
+                            option_for_pos_data = found_option.copy()
+                            option_for_pos_data['name'] = option_name_for_pos
+
+                            reconstructed_option_groups.append(MenuProductOptionGroup(
+                                name=group_name_for_pos,
+                                options=[MenuProductOption(**option_for_pos_data)]
+                            ))
+                            item_price += found_option.get("adjustPrice", 0.0)
+                        else:
+                            logger.warning(f"Could not find selected option '{selected_value}' in group '{selection_key}' for item '{item_name_en}'.")
+                    
                     product_options_for_pos = reconstructed_option_groups
-                    logger.info(f"Reconstructed {len(product_options_for_pos)} option groups for non-combo. Final price: {item_price}")
-                
-                # Case 3: No options or item is not a combo
+                    logger.info(f"Reconstructed {len(product_options_for_pos)} option groups for non-combo dict. Final price: {item_price}")
+
+                # Case 4: No options or item is not a combo
                 else:
                     if pos_options:
-                        logger.warning(f"Item '{item_name_en}' has options in an unexpected format: {type(pos_options)}. Skipping.")
+                        logger.warning(f"Item '{item_name_en}' has options in an unhandled format: {type(pos_options)}. Skipping.")
                     item_price = float(pos_dish_details.get("price", 0.0))
 
                 processed_pos_items.append(ApiOrderItem(
@@ -1535,11 +1358,13 @@ async def process_combo_proteins(
             logger.warning(f"Could not find protein '{protein_name}' with size '{size_key}' in the mapping.")
             continue
 
-        found_menu_option = next((opt for opt in all_protein_options_from_menu if opt.get("name", {}).get("en") == pos_protein_name), None)
+        # Use the robust _get_english_name helper to handle null 'en' fields
+        found_menu_option = next((opt for opt in all_protein_options_from_menu if _get_english_name(opt.get("name", {})) == pos_protein_name), None)
         
         if found_menu_option:
             base_price = found_menu_option.get("adjustPrice", 0.0)
-            menu_opt_name_lower = found_menu_option.get("name", {}).get("en", "").lower()
+            # Use the robust getter here as well for safety
+            menu_opt_name_lower = _get_english_name(found_menu_option.get("name", {})).lower()
             
             base_weight = 1.0 if "half a pound" not in menu_opt_name_lower and "0.5" not in menu_opt_name_lower else 0.5
             
@@ -1573,10 +1398,9 @@ async def process_other_combo_options(
     reconstructed_groups = []
     total_price = 0.0
 
-    target_group = next((g for g in all_option_groups_from_menu if g.get("name", {}).get("en", "").strip().lower() == selection_key.strip().lower()), None)
+    target_group = next((g for g in all_option_groups_from_menu if _get_english_name(g.get("name", {})).strip().lower() == selection_key.strip().lower()), None)
     if not target_group:
-        # Fallback for case-sensitive keys
-        target_group = next((g for g in all_option_groups_from_menu if g.get("name", {}).get("en", "").strip() == selection_key.strip()), None)
+        target_group = next((g for g in all_option_groups_from_menu if _get_english_name(g.get("name", {})).strip() == selection_key.strip()), None)
 
     if not target_group:
         logger.warning(f"Could not find option group '{selection_key}' for combo '{item_name_en}'.")
@@ -1587,7 +1411,8 @@ async def process_other_combo_options(
 
     matched_options_for_group = []
     for selected_value in selected_values:
-        found_option = next((opt for opt in target_group.get("options", []) if opt.get("name", {}).get("en", "") == selected_value), None)
+        # Use the robust _get_english_name to handle inconsistent data
+        found_option = next((opt for opt in target_group.get("options", []) if _get_english_name(opt.get("name", {})).strip().lower() == str(selected_value).strip().lower()), None)
         if found_option:
             matched_options_for_group.append(MenuProductOption(**found_option))
             total_price += found_option.get("adjustPrice", 0.0)
@@ -1602,6 +1427,8 @@ async def process_other_combo_options(
         
     return reconstructed_groups, total_price
 
+
+# The deprecated handle_order_summary_Square function.
 
 # # This function is deprecated and related to the Square integration, which is not in use.
 # # It will be left as-is but is not expected to be called.

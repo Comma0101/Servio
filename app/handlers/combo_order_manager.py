@@ -49,7 +49,8 @@ class ComboOrderManager:
             self.active_orders[call_sid]["state"] = "AWAITING_PROTEIN_CHOICE"
             return {
                 "status": "PROMPT_FOR_PROTEIN",
-                "message_for_agent": "The Customized Combo is a great choice! What protein would you like to add? Popular choices include Shrimp, Mussels, and Crab Legs. You can pick one of those, name another choice, or just say 'send the menu' and I'll text it to you."
+                "message_for_agent": "The Customized Combo is a great choice! What protein would you like to add? Popular choices include Shrimp, Mussels, and Crab Legs. You can pick one of those, name another choice, or just say 'send the menu' and I'll text it to you.",
+                "tool_to_use": "handle_combo_item_selection"
             }
         else:
             self.active_orders[call_sid]["selections"]["fixed_combo_selections"] = []
@@ -58,30 +59,36 @@ class ComboOrderManager:
 
     def process_selection(self, user_input: str, call_sid: str) -> Dict[str, Any]:
         if call_sid not in self.active_orders:
-            return {"message_for_agent": "Sorry, I don't have an active combo order for you. Let's start over."}
+            return {"message_for_agent": "Sorry, I don't have an active combo order for you. Let's start over.", "tool_to_use": "handle_standard_item_selection"}
 
         order = self.active_orders[call_sid]
         
+        response = {}
         if order["state"] == "AWAITING_PROTEIN_CHOICE":
-            return self._handle_protein_selection(user_input, order, call_sid)
+            response = self._handle_protein_selection(user_input, order, call_sid)
         elif order["state"] == "AWAITING_PROTEIN_CLARIFICATION":
-            return self._handle_protein_clarification(user_input, order, call_sid)
+            response = self._handle_protein_clarification(user_input, order, call_sid)
         elif order["state"] == "AWAITING_SIZE_CHOICE":
-            return self._handle_size_selection(user_input, order, call_sid)
+            response = self._handle_size_selection(user_input, order, call_sid)
         elif order["state"] == "AWAITING_OPTION_CHOICE":
-            return self._handle_option_selection(user_input, order, call_sid)
+            response = self._handle_option_selection(user_input, order, call_sid)
         elif order["state"] == "AWAITING_OPTIONAL_CHOICE_CONFIRMATION":
-            return self._handle_optional_choice_confirmation(user_input, order, call_sid)
+            response = self._handle_optional_choice_confirmation(user_input, order, call_sid)
         elif order["state"] == "AWAITING_INFO_DELIVERY_CHOICE":
-            return self._handle_info_delivery_choice(user_input, order, call_sid)
+            response = self._handle_info_delivery_choice(user_input, order, call_sid)
         elif order["state"] == "AWAITING_FINAL_CONFIRMATION":
-            return self._finalize_combo_and_prepare_for_cart(user_input, order, call_sid)
+            response = self._finalize_combo_and_prepare_for_cart(user_input, order, call_sid)
         elif order["state"] == "AWAITING_MORE_PROTEINS":
-            return self._handle_more_proteins(user_input, order, call_sid)
+            response = self._handle_more_proteins(user_input, order, call_sid)
         elif order["state"] == "AWAITING_UPDATE":
-            return self.update_combo_selection(user_input, order, call_sid)
+            response = self.update_combo_selection(user_input, order, call_sid)
         else:
-            return {"status": "ERROR", "message_for_agent": "Invalid order state."}
+            response = {"status": "ERROR", "message_for_agent": "Invalid order state."}
+
+        # Ensure all responses from this manager recommend the correct tool, unless the combo is finished.
+        if order["state"] != "AWAITING_MORE_ITEMS_PROMPT":
+             response["tool_to_use"] = "handle_combo_item_selection"
+        return response
 
     def _clean_protein_name(self, original_name: str) -> str:
         # This regex now handles "1lb", "half a pound", "half pound of", and similar variations.
@@ -109,6 +116,33 @@ class ComboOrderManager:
         text = re.sub(r'\(?(\d+)pc\)?', lambda m: f"{m.group(1)} piece" if m.group(1) == '1' else f"{m.group(1)} pieces", text)
         
         return text
+
+    def _is_primarily_english(self, text: str) -> bool:
+        """
+        Checks if the text is primarily English characters.
+        """
+        if not text:
+            return True
+        # This regex allows basic Latin alphabet, digits, and common punctuation.
+        return bool(re.fullmatch(r"^[a-zA-Z0-9\s!\"#$%&'()*+,-./:;<=>?@[\\\]^_`{|}~]*$", text))
+
+    def _get_display_name(self, name_obj: Dict[str, Optional[str]]) -> Optional[str]:
+        """
+        Intelligently selects the display name, falling back to Chinese if the
+        English name is missing but contains English characters.
+        """
+        if not name_obj:
+            return None
+        
+        name_en = name_obj.get("en")
+        if name_en:
+            return name_en
+        
+        name_zh = name_obj.get("zh")
+        if name_zh and self._is_primarily_english(name_zh):
+            return name_zh
+            
+        return name_zh # Fallback to zh even if it's not English, to avoid returning None if possible
 
     def user_requests_options(self, user_input: str) -> bool:
         """Check if the user is asking for a list of options."""
@@ -300,7 +334,7 @@ class ComboOrderManager:
             return {"status": "ERROR", "message_for_agent": "Something went wrong with the order steps."}
         
         current_group = option_groups[current_group_index]
-        group_name = current_group.get("name", {}).get("en")
+        group_name = self._get_display_name(current_group.get("name", {}))
         
         # If the group is optional, the user might say "no" or "skip"
         if not current_group.get("isRequired", True):
@@ -314,14 +348,17 @@ class ComboOrderManager:
         if "sausage" in user_input.lower():
             cleaned_input = user_input.lower().replace("sausage", "sausges")
 
-        options = [opt.get("name", {}).get("en") for opt in current_group.get("options", [])]
-        best_match, score = process.extractOne(cleaned_input, options)
+        options = [self._get_display_name(opt.get("name", {})) for opt in current_group.get("options", [])]
+        # Filter out None values that might result from _get_display_name
+        valid_options = [opt for opt in options if opt]
+        
+        best_match, score = process.extractOne(cleaned_input, valid_options)
         
         if score < 80:
             options_str = ", ".join(options)
             return {
                 "action": "reprompt",
-                "message_for_agent": f"I'm sorry, I didn't understand that. For {group_name}, your options are: {options_str}. Which would you like?"
+                "message_for_agent": f"I'm sorry, I didn't understand that. For {group_name}, your options are: {', '.join(valid_options)}. Which would you like?"
             }
         
         if "customized combo" not in order["dish_name"].lower():
@@ -556,16 +593,17 @@ class ComboOrderManager:
         }
 
         for i, group in enumerate(option_groups):
-            group_name = group.get("name", {}).get("en")
+            group_name = self._get_display_name(group.get("name", {}))
             # Skip the protein selection group as it's handled differently
             if not group_name or "choose one" in group_name.lower() or "half a pound" in group_name.lower():
                 continue
 
-            options = [opt.get("name", {}).get("en") for opt in group.get("options", [])]
-            if not options:
+            options = [self._get_display_name(opt.get("name", {})) for opt in group.get("options", [])]
+            valid_options = [opt for opt in options if opt]
+            if not valid_options:
                 continue
                 
-            best_match, score = process.extractOne(user_input, options)
+            best_match, score = process.extractOne(user_input, valid_options)
             
             if score > best_group_info["score"]:
                 best_group_info["score"] = score
@@ -612,21 +650,9 @@ class ComboOrderManager:
         is_negative = any(phrase in user_input_lower for phrase in negative_phrases)
 
         if is_negative:
-            # User is done adding proteins. Confirm what's been added and move to the next step in one go.
+            # User is done adding proteins. Move directly to the next step.
             order["state"] = "AWAITING_OPTION_CHOICE"
-            protein_summary = ", ".join([f"{p.get('size', '1 lb')} of {p['name']}" for p in order["selections"]["proteins"]])
-            
-            # Get the next question payload
-            next_question_payload = self.get_next_question(call_sid)
-            
-            # Prepend the confirmation to the next question's message
-            original_message = next_question_payload.get("message_for_agent", "")
-            if original_message:
-                 next_question_payload["message_for_agent"] = f"Okay, I have {protein_summary}. Now, {original_message[0].lower()}{original_message[1:]}"
-            else: # Fallback in case get_next_question has an issue
-                 next_question_payload["message_for_agent"] = f"Okay, I have {protein_summary}. What's next?"
-
-            return next_question_payload
+            return self.get_next_question(call_sid)
         
         # If the user says a simple "yes", prompt them for the next item.
         affirmative_responses = ["yes", "sure", "yeah", "another"]
@@ -643,45 +669,43 @@ class ComboOrderManager:
 
     def _finalize_combo_and_prepare_for_cart(self, user_input: str, order: Dict[str, Any], call_sid: str) -> Dict[str, Any]:
         """
-        Handles the final confirmation of the combo, adds it to the completed list,
-        and prepares it to be added to the main cart.
+        Handles the final confirmation of the combo. Assumes confirmation unless the user
+        explicitly requests a change.
         """
-        if any(word in user_input.lower() for word in ["yes", "correct", "right", "yep"]):
-            # User confirms the combo. Finalize it.
-            self.add_completed_combo(call_sid, order)
-            
-            selections = order.get("selections", {})
-            product_options = {key: value for key, value in selections.items()}
-            if 'proteins' in selections:
-                product_options['proteins'] = selections['proteins']
-
-            completed_item = {
-                "name": order["dish_name"],
-                "quantity": 1,
-                "options": product_options,
-            }
-
-            # Now, ask if they want to add more items to the order.
-            # This is a clear, explicit next step.
-            order["state"] = "AWAITING_MORE_ITEMS_PROMPT"
-            
-            # Clear the active order since it's now complete
-            self.clear_order(call_sid)
-            
-            return {
-                "status": "ITEM_READY_FOR_CART",
-                "action": "PROMPT_FOR_MORE_ITEMS",
-                "message_for_agent": f"Great, I've added the {order['dish_name']} to your order. You can add more items, or say 'finish order' to complete your order.",
-                "item_to_add": completed_item
-            }
+        user_input_lower = user_input.lower() if user_input else ""
         
-        # Handle cases where the user wants to make a change.
-        else:
-            # If the user's response is not a confirmation, assume they want to make a change.
-            # Transition to the AWAITING_UPDATE state to handle the modification.
+        # Keywords that indicate the user wants to change something.
+        change_keywords = ["no", "change", "wrong", "instead", "actually"]
+        
+        # Check if the user's input explicitly signals a desire to change the order.
+        if any(keyword in user_input_lower for keyword in change_keywords):
             order["state"] = "AWAITING_UPDATE"
-            # Pass the user's input to the update handler.
             return self.update_combo_selection(user_input, order, call_sid)
+
+        # If no change keywords are detected, treat it as a confirmation.
+        # This handles "yes", "correct", "yep", and also cases where input is None or empty.
+        self.add_completed_combo(call_sid, order)
+        
+        selections = order.get("selections", {})
+        product_options = {key: value for key, value in selections.items()}
+        if 'proteins' in selections:
+            product_options['proteins'] = selections['proteins']
+
+        completed_item = {
+            "name": order["dish_name"],
+            "quantity": 1,
+            "options": product_options,
+        }
+
+        order["state"] = "AWAITING_MORE_ITEMS_PROMPT"
+        self.clear_order(call_sid)
+        
+        return {
+            "status": "ITEM_READY_FOR_CART",
+            "action": "PROMPT_FOR_MORE_ITEMS",
+            "message_for_agent": f"Great, I've added the {order['dish_name']} to your order. You can add more items, or say 'finish order' to complete your order.",
+            "item_to_add": completed_item
+        }
 
     def get_next_question(self, call_sid: str) -> Dict[str, Any]:
         if call_sid not in self.active_orders:
@@ -702,17 +726,19 @@ class ComboOrderManager:
 
         while order["current_step"] < len(option_groups):
             current_group = option_groups[order["current_step"]]
-            group_name = current_group.get("name", {}).get("en", "").lower()
-            logger.info(f"Processing group: '{group_name}' at step {order['current_step']}")
+            
+            group_display_name = self._get_display_name(current_group.get("name", {}))
+            group_name_lower = group_display_name.lower() if group_display_name else ""
+            logger.info(f"Processing group: '{group_display_name}' at step {order['current_step']}")
 
-            if is_customized_combo and ("choose one" in group_name or "half a pound" in group_name):
+            if is_customized_combo and ("choose one" in group_name_lower or "half a pound" in group_name_lower):
                 order["current_step"] += 1
                 continue
 
             order["state"] = "AWAITING_OPTION_CHOICE"
             
             message = ""
-            if is_fixed_combo and "choose one" in group_name and "free" not in group_name:
+            if is_fixed_combo and "choose one" in group_name_lower and "free" not in group_name_lower:
                 order["choose_one_count"] += 1
                 protein_prompts = {
                     1: "What would you like to choose for your first protein?",
@@ -721,20 +747,20 @@ class ComboOrderManager:
                 }
                 message = protein_prompts.get(order["choose_one_count"], f"Please choose another item.")
                 logger.info(f"Generated protein prompt for count {order['choose_one_count']}: '{message}'")
-            elif is_fixed_combo and "pick 1 free" in group_name:
+            elif is_fixed_combo and "pick 1 free" in group_name_lower:
                 message = "You also get a free item with your combo. Would you like corn, potatoes, or sausage?"
                 logger.info("Generated 'pick 1 free' prompt.")
-            elif is_fixed_combo and "choose one for free" in group_name:
+            elif is_fixed_combo and "choose one for free" in group_name_lower:
                 message = "You get one more free item. Which would you like?"
                 logger.info("Generated 'choose one for free' prompt.")
             
             if not message:
-                cleaned_group_name = self._clean_prompt_text(current_group.get("name", {}).get("en"))
+                cleaned_group_name = self._clean_prompt_text(group_display_name)
                 message = f"For your {order['dish_name']}, what would you like for {cleaned_group_name}?"
                 logger.info(f"Generated default prompt for group '{cleaned_group_name}'")
 
-            options = [self._clean_option_name_for_tts(opt.get("name", {}).get("en")) for opt in current_group.get("options", [])]
-            cleaned_options = [self._clean_prompt_text(opt) for opt in options]
+            options = [self._clean_option_name_for_tts(self._get_display_name(opt.get("name", {}))) for opt in current_group.get("options", [])]
+            cleaned_options = [self._clean_prompt_text(opt) for opt in options if opt]
             options_str = ", ".join(cleaned_options)
             
             message += f" Your options are: {options_str}."
@@ -818,5 +844,38 @@ class ComboOrderManager:
     def clear_order(self, call_sid: str):
         if call_sid in self.active_orders:
             del self.active_orders[call_sid]
+
+    def is_awaiting_final_confirmation(self, call_sid: str) -> bool:
+        """Checks if a combo order is awaiting final confirmation."""
+        return self.is_active(call_sid) and self.active_orders[call_sid].get("state") == "AWAITING_FINAL_CONFIRMATION"
+
+    def finalize_and_get_combo(self, call_sid: str) -> Optional[Dict[str, Any]]:
+        """
+        Programmatically finalizes a combo that is awaiting confirmation and returns it.
+        This is used for the intelligent checkout consolidation.
+        """
+        if not self.is_awaiting_final_confirmation(call_sid):
+            return None
+
+        order = self.active_orders[call_sid]
+        
+        # This logic is borrowed from _finalize_combo_and_prepare_for_cart
+        self.add_completed_combo(call_sid, order)
+        
+        selections = order.get("selections", {})
+        product_options = {key: value for key, value in selections.items()}
+        if 'proteins' in selections:
+            product_options['proteins'] = selections['proteins']
+
+        completed_item = {
+            "name": order["dish_name"],
+            "quantity": 1,
+            "options": product_options,
+        }
+
+        # Clean up the active order
+        self.clear_order(call_sid)
+        
+        return completed_item
 
 combo_order_manager = ComboOrderManager()

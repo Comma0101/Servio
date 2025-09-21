@@ -17,9 +17,11 @@ from app.utils.twilio import redirect_call
 from app.config import settings
 from app.handlers.english_tool_logic import FINAL_AUDIO_MARK_NAME
 from app.utils.twilio import end_call
-from app.services.call_state_service import remove_call_state
+from app.services.call_state_service import remove_call_state, get_and_clear_next_tool
 from starlette.websockets import WebSocketState
 from app.handlers.english_tool_logic import clean_text_for_tts
+from app.handlers.combo_order_manager import combo_order_manager
+from app.handlers.order_manager import order_manager
 from app.handlers.common_tool_defs import (
     ORDER_SUMMARY_TOOL_SCHEMA_EN_OPENAI,
     CHECK_MENU_ITEM_TOOL_SCHEMA_EN_OPENAI,
@@ -27,9 +29,8 @@ from app.handlers.common_tool_defs import (
     RECOMMEND_DISHES_TOOL_SCHEMA_EN_OPENAI,
     GET_RANDOM_MENU_CATEGORIES_TOOL_SCHEMA_EN_OPENAI,
     SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI,
-    START_COMBO_ORDER_TOOL_SCHEMA,
-    PROCESS_COMBO_SELECTION_TOOL_SCHEMA,
-    LIST_PROTEIN_OPTIONS_TOOL_SCHEMA
+    PROCESS_ORDER_SELECTION_TOOL_SCHEMA,
+    PROCESS_COMBO_SELECTION_TOOL_SCHEMA
 )
 
 # Configure logging
@@ -65,9 +66,8 @@ class DeepgramEnglishAudioHandler():
             RECOMMEND_DISHES_TOOL_SCHEMA_EN_OPENAI,
             GET_RANDOM_MENU_CATEGORIES_TOOL_SCHEMA_EN_OPENAI,
             SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI,
-            START_COMBO_ORDER_TOOL_SCHEMA,
-            PROCESS_COMBO_SELECTION_TOOL_SCHEMA,
-            LIST_PROTEIN_OPTIONS_TOOL_SCHEMA
+            PROCESS_ORDER_SELECTION_TOOL_SCHEMA, # This will be renamed in the schema file
+            PROCESS_COMBO_SELECTION_TOOL_SCHEMA # This will be renamed in the schema file
         ]
         
         # Initialize caller information
@@ -606,6 +606,29 @@ class DeepgramEnglishAudioHandler():
                 }
 
                 try:
+                    # --- COMBO FINALIZATION GATEKEEPER (MOVED FROM english_tool_logic.py) ---
+                    # This logic must run *before* the state override check.
+                    if function_name == "order_summary" and combo_order_manager.is_awaiting_final_confirmation(self.call_sid):
+                        logger.info(f"Finalizing pending combo for call {self.call_sid} before dispatching tool.")
+                        completed_combo = combo_order_manager.finalize_and_get_combo(self.call_sid)
+                        if completed_combo:
+                            order_manager.add_item_to_cart(
+                                self.call_sid,
+                                completed_combo.get("name"),
+                                completed_combo.get("quantity", 1),
+                                completed_combo.get("options", {})
+                            )
+                            logger.info(f"Successfully finalized and moved combo '{completed_combo.get('name')}' to main cart.")
+                            await clear_next_tool(self.call_sid) # Clear any pending state override after successful finalization
+                        else:
+                            logger.error(f"Failed to finalize pending combo for call {self.call_sid}. The combo may be lost.")
+                    
+                    # State override logic
+                    next_tool_override = await get_and_clear_next_tool(self.call_sid)
+                    if next_tool_override:
+                        logger.info(f"STATE OVERRIDE: Forcing use of tool '{next_tool_override}' instead of agent-selected '{function_name}' for call {self.call_sid}")
+                        reformatted_function_request["function_name"] = next_tool_override
+                    
                     from app.handlers.english_tool_logic import handle_function_call
                     await handle_function_call(
                         reformatted_function_request,

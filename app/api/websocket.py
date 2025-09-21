@@ -24,8 +24,7 @@ from app.handlers.common_tool_defs import (
     RECOMMEND_DISHES_TOOL_SCHEMA_EN_OPENAI,
     GET_RANDOM_MENU_CATEGORIES_TOOL_SCHEMA_EN_OPENAI,
     SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI,
-    START_COMBO_ORDER_TOOL_SCHEMA,
-    PROCESS_COMBO_SELECTION_TOOL_SCHEMA
+    PROCESS_ORDER_SELECTION_TOOL_SCHEMA
 )
 try:
     from google.cloud import texttospeech_v1 as texttospeech
@@ -544,8 +543,7 @@ async def handle_media_stream(websocket: WebSocket):
             RECOMMEND_DISHES_TOOL_SCHEMA_EN_OPENAI,
             GET_RANDOM_MENU_CATEGORIES_TOOL_SCHEMA_EN_OPENAI,
             SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI,
-            START_COMBO_ORDER_TOOL_SCHEMA,
-            PROCESS_COMBO_SELECTION_TOOL_SCHEMA
+            PROCESS_ORDER_SELECTION_TOOL_SCHEMA
         ]
         
         # Initialize based on language

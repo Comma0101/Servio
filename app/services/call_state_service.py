@@ -22,7 +22,8 @@ async def register_call(call_sid: str, stream_sid: str, caller_phone: Optional[s
         "last_activity": time.time(),
         "status": "active",
         "pending_tts": set(),
-        "completed_tts": set()
+        "completed_tts": set(),
+        "next_tool_to_use": None  # For stateful tool enforcement
     }
     logger.info(f"Registered call {call_sid} with stream {stream_sid}")
     return True
@@ -181,3 +182,31 @@ async def remove_call_state(call_sid: str):
     # if stream_sid_to_remove and stream_sid_to_remove in _media_events:
     #     del _media_events[stream_sid_to_remove]
     #     logger.debug(f"Removed media events for stream_sid: {stream_sid_to_remove}")
+
+async def set_next_tool(call_sid: str, tool_name: str):
+    """Sets the specific tool that must be used on the next turn."""
+    if call_sid in _call_states:
+        _call_states[call_sid]["next_tool_to_use"] = tool_name
+        _call_states[call_sid]["last_activity"] = time.time()
+        logger.info(f"State override: Next tool for call {call_sid} MUST be '{tool_name}'")
+    else:
+        logger.warning(f"Attempted to set next tool for unknown call_sid: {call_sid}")
+
+async def get_and_clear_next_tool(call_sid: str) -> Optional[str]:
+    """Retrieves and clears the specific tool for the current turn."""
+    if call_sid in _call_states:
+        tool_name = _call_states[call_sid].get("next_tool_to_use")
+        if tool_name:
+            logger.info(f"State override: Retrieved next tool '{tool_name}' for call {call_sid}. Clearing state.")
+            _call_states[call_sid]["next_tool_to_use"] = None
+            _call_states[call_sid]["last_activity"] = time.time()
+            return tool_name
+    return None
+
+async def clear_next_tool(call_sid: str):
+    """Clears the specific tool override for a call."""
+    if call_sid in _call_states:
+        if _call_states[call_sid].get("next_tool_to_use"):
+            logger.info(f"State override: Clearing next tool for call {call_sid}.")
+            _call_states[call_sid]["next_tool_to_use"] = None
+            _call_states[call_sid]["last_activity"] = time.time()

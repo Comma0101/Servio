@@ -20,7 +20,7 @@ from app.constants import (
 
 # --- Module-level Configuration ---
 logger = logging.getLogger(__name__)
-CACHE_FILE_TEMPLATE = "app/utils/extracted_dishes_cache_{portal_id}.json"
+CACHE_FILE_TEMPLATE = "app/utils/extracted_dishes_cache_v2_{portal_id}.json" # Cache bust
 CACHE_DURATION_HOURS = 24
 
 # --- Pydantic Models for Order Creation ---
@@ -46,8 +46,8 @@ class MenuProductOptionGroup(BaseModel):
     is_allow_multiple: Optional[bool] = Field(None, alias="isAllowMultiple")
     description: Optional[str] = None
     options: Optional[List[MenuProductOption]] = None
-    min_count: Optional[int] = Field(None, alias="MinCount")
-    max_count: Optional[int] = Field(None, alias="MaxCount")
+    min_count: Optional[int] = Field(None, alias="minCount")
+    max_count: Optional[int] = Field(None, alias="maxCount")
     class Config:
         populate_by_name = True
 
@@ -267,6 +267,41 @@ def _preprocess_menu_data(raw_menu: List[Dict[str, Any]]) -> List[Dict[str, Any]
             
             if "combo" in item_name_en_lower:
                 item["is_combo"] = True
+                # If it's a customized combo, enforce isRequired and a specific order.
+                if "customized combo" in item_name_en_lower:
+                    option_groups = item.get("optionGroups", [])
+                    if option_groups:
+                        # Filter out null/None entries from the list to prevent crashes
+                        valid_option_groups = [g for g in option_groups if g is not None]
+
+                        logger.info("Applying specific ordering and isRequired patch for 'Customized Combo'.")
+                        
+                        # Define the desired order of options
+                        desired_order = [
+                            "choose one",
+                            "half a pound",
+                            "pick your flavor",
+                            "pick your spicy level",
+                            "add on"
+                        ]
+                        
+                        def get_order_index(group):
+                            # This is now safe because we filtered out None values
+                            group_name = ((group.get("name") or {}).get("en") or "").lower()
+                            for i, term in enumerate(desired_order):
+                                if term in group_name:
+                                    return i
+                            return len(desired_order) # Place unknown groups at the end
+
+                        # Sort the valid groups according to the desired order
+                        valid_option_groups.sort(key=get_order_index)
+                        
+                        # Mark all of them as required
+                        for group in valid_option_groups:
+                            group["isRequired"] = True
+                        
+                        # Assign the cleaned and sorted list back to the item
+                        item["optionGroups"] = valid_option_groups
     return raw_menu
 
 # --- Public Functions ---

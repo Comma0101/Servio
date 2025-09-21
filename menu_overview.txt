@@ -8,33 +8,33 @@ This menu is categorized based on how the order processing flow is handled in th
 - Raw Oyster (6 PCs) - $11.99
 - Raw Oyster (12 PCs) - $23.99
 - Fried bun (8pc) - $6.00
-- Tacos (shrimp or catfish) - $5.99 (Requires meat option)
+- Tacos - $5.99 (Requires meat option: shrimp or catfish; Optional add-ons)
 - Steamed Rice - $2.50
-- French Fries - $5.99
-- Curly Fries - $6.10
+- French Fries - $5.99 (Requires flavor option)
+- Curly Fries - $6.10 (Requires flavor option)
 - Sweet Potato Fries - $7.99
-- Garlic Noodles - $9.99
-- Gumbo (10 oz) - $8.50
+- Garlic Noodles - $9.99 (Requires shrimp option)
+- Gumbo (10 oz) - $8.50 (Requires rice option)
 - Clam Chowder - $8.99
-- Gumbo (36 oz) - $20.99
+- Gumbo (36 oz) - $20.99 (Requires rice option)
 - Garlic Bread (3pc) - $5.00
-- Egg Roll (6 pc) - $8.99
-- Fried Dumplings (Chicken or Pork) - $8.99
+- Egg Roll (6 pc) - $8.99 (Requires seasoning option)
+- Fried Dumplings - $8.99 (Requires filling option: Chicken or Pork)
 
 ### Fried Baskets (Served with fries)
-- Fried Catfish - $13.99
-- Fried Shrimp (12 pc) - $13.99
-- Fried Calamari - $13.99
-- Fried Oyster (10 pc) - $14.99
-- Fried Chicken Tenders - $13.99
-- Kids Chicken Tenders - $7.99
-- Coconut Shrimp - $13.99
-- Chicken Wings (6 pc) - $10.99
-- Chicken Wings (12 pc) - $17.99
-- Fried Dungeness Legs (8 pc) - $45.00
-- Fried Lobster Tail (1 pc) - $25.00
+- Fried Catfish - $13.99 (Requires seasoning, fries, and sauce options)
+- Fried Shrimp (12 pc) - $13.99 (Requires seasoning, fries, and sauce options)
+- Fried Calamari - $13.99 (Requires seasoning, fries, and sauce options)
+- Fried Oyster (10 pc) - $14.99 (Requires seasoning, fries, and sauce options)
+- Fried Chicken Tenders - $13.99 (Requires seasoning, fries, and sauce options)
+- Kids Chicken Tenders - $7.99 (Requires seasoning, fries, and sauce options)
+- Coconut Shrimp - $13.99 (Requires seasoning, fries, and sauce options)
+- Chicken Wings (6 pc) - $10.99 (Requires seasoning, fries, and sauce options)
+- Chicken Wings (12 pc) - $17.99 (Requires seasoning, fries, and sauce options)
+- Fried Dungeness Legs (8 pc) - $45.00 (Requires seasoning and fries options)
+- Fried Lobster Tail (1 pc) - $25.00 (Requires seasoning and fries options)
 
-### Seafood by the Pound (Requires flavor and spice level options)
+### Seafood by the Pound (All require flavor, spice level, and a free side option)
 - Crawfish (Frozen) - $20.00
 - Shrimp (Head-on) - $18.00
 - Shrimp (Headless) - $20.00
@@ -51,33 +51,35 @@ This menu is categorized based on how the order processing flow is handled in th
 ### Drinks
 - Soda (32 oz Coke, Sprite, Fanta, etc.) - $3.00
 - Bottled Tea (Sweet or Unsweet) - $3.00
-- Jarritos - $3.00
+- Jarritos - $3.00 (Requires flavor option)
 - Bottled Water - $1.25
-- Ice Cream - $3.00
+- Ice Cream - $3.00 (Requires flavor option: vanilla or coffee)
 - Root Beer Float - $4.00
+- Michelada - $7.99 (Requires soda option: coke or sprite)
+- Cans - $2.00 (Requires soda option)
 
 ---
 
 ## Combo Dishes (Handled by the ComboOrderManager)
 
 ### Fried Combos
-- Deep Fryer Combo (Catfish, Shrimp, Calamari, Oysters) - $26.00
-- Customized Fried Combo - $13.99
+- Deep Fryer Combo (Catfish, Shrimp, Calamari, Oysters) - $26.00 (Multiple choices and options)
+- Customized Fried Combo - $13.99 (Multiple choices and options)
 
 ### Seafood Combos
-- COMBO #1 - $55.00
-- COMBO #2 - $75.00
-- COMBO #3 - $95.00
-- FAMILY COMBO - $110.00
-- Customized Combo - Price Varies
+- COMBO #1 - $55.00 (Multiple choices and options)
+- COMBO #2 - $75.00 (Multiple choices and options)
+- COMBO #3 - $95.00 (Multiple choices and options)
+- FAMILY COMBO - $110.00 (Multiple choices and options)
+- Customized Combo - Price Varies (Multiple choices and options)
 
 ### Special Combos
-- Lunch Special #1 - $30.00
-- Lunch Special #2 - $30.00
-- Lunch Special #3 - $30.00
-- Lunch Special #4 - $30.00
-- Lunch Special #5 - $25.00
-- Lunch Special #6 - $25.00
-- Lunch Special #7 - $25.00
-- Lunch Special #8 - $25.00
-- WEEKEND COMBO SPECIAL - $60.00
+- Lunch Special #1 - $30.00 (Multiple choices and options)
+- Lunch Special #2 - $30.00 (Multiple choices and options)
+- Lunch Special #3 - $30.00 (Multiple choices and options)
+- Lunch Special #4 - $30.00 (Multiple choices and options)
+- Lunch Special #5 - $25.00 (Multiple choices and options)
+- Lunch Special #6 - $25.00 (Multiple choices and options)
+- Lunch Special #7 - $25.00 (Multiple choices and options)
+- Lunch Special #8 - $25.00 (Multiple choices and options)
+- WEEKEND COMBO SPECIAL - $60.00 (Multiple choices and options)

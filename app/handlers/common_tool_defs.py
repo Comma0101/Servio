@@ -385,24 +385,39 @@ SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
     }
 }
 
-START_COMBO_ORDER_TOOL_SCHEMA: Dict[str, Any] = {
-    "name": "start_combo_order",
-    "description": "Use this tool for any combo order, including 'Customized Combo' and fixed-price combos like 'COMBO #1'. It initiates a guided process to gather all necessary choices from the user.",
+PROCESS_ORDER_SELECTION_TOOL_SCHEMA: Dict[str, Any] = {
+    "name": "handle_standard_item_selection",
+    "description": "Processes selections (e.g., flavor, spice level) for standard, non-combo menu items. **DO NOT use for 'Customized Combo' orders.**",
     "parameters": {
         "type": "object",
         "properties": {
-            "dish_name": {
+            "user_input": {
                 "type": "string",
-                "description": "The name of the combo dish the user wants to order."
+                "description": "The user's complete, verbatim response to the current question about their selection."
             }
         },
-        "required": ["dish_name"]
+        "required": ["user_input"]
     }
 }
 
+# START_COMBO_ORDER_TOOL_SCHEMA: Dict[str, Any] = {
+#     "name": "start_combo_order",
+#     "description": "Use this tool for any combo order, including 'Customized Combo' and fixed-price combos like 'COMBO #1'. It initiates a guided process to gather all necessary choices from the user.",
+#     "parameters": {
+#         "type": "object",
+#         "properties": {
+#             "dish_name": {
+#                 "type": "string",
+#                 "description": "The name of the combo dish the user wants to order."
+#             }
+#         },
+#         "required": ["dish_name"]
+#     }
+# }
+
 PROCESS_COMBO_SELECTION_TOOL_SCHEMA: Dict[str, Any] = {
-    "name": "process_combo_selection",
-    "description": "Processes any user response during a combo order step. Use this for protein selections (e.g., 'shrimp'), affirmations (e.g., 'yes'), or negations (e.g., 'no, that's it').",
+    "name": "handle_combo_item_selection",
+    "description": "**MUST be used for ALL selections within a 'Customized Combo' order.** This is the only tool for handling proteins (e.g., 'shrimp'), sizes (e.g., '1 pound'), affirmations ('yes'), or negations ('no, that's it'). After a negation, the system will provide the next step; do not ask if the user wants to finish the order.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -415,15 +430,15 @@ PROCESS_COMBO_SELECTION_TOOL_SCHEMA: Dict[str, Any] = {
     }
 }
 
-LIST_PROTEIN_OPTIONS_TOOL_SCHEMA: Dict[str, Any] = {
-    "name": "list_protein_options_for_combo",
-    "description": "Lists the available protein options for a combo order when the user asks for them.",
-    "parameters": {
-        "type": "object",
-        "properties": {},
-        "required": []
-    }
-}
+# LIST_PROTEIN_OPTIONS_TOOL_SCHEMA: Dict[str, Any] = {
+#     "name": "list_protein_options_for_combo",
+#     "description": "Lists the available protein options for a combo order when the user asks for them.",
+#     "parameters": {
+#         "type": "object",
+#         "properties": {},
+#         "required": []
+#     }
+# }
 
 
 # --- Common Alias Dictionaries ---
