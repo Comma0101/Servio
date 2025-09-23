@@ -17,7 +17,7 @@ from app.utils.twilio import redirect_call
 from app.config import settings
 from app.handlers.english_tool_logic import FINAL_AUDIO_MARK_NAME
 from app.utils.twilio import end_call
-from app.services.call_state_service import remove_call_state, get_and_clear_next_tool
+from app.services.call_state_service import remove_call_state, get_and_clear_next_tool, clear_next_tool
 from starlette.websockets import WebSocketState
 from app.handlers.english_tool_logic import clean_text_for_tts
 from app.handlers.combo_order_manager import combo_order_manager

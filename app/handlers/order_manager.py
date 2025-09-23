@@ -38,24 +38,21 @@ class OrderManager:
         """
         name_en = _get_english_name(dish_details.get("name"), "the item")
         
-        # Filter for only the required option groups
-        required_option_groups = [
-            group for group in dish_details.get("optionGroups", [])
-            if group.get("isRequired")
-        ]
+        # For testing, include all option groups, not just required ones.
+        all_option_groups = dish_details.get("optionGroups", [])
 
-        if not required_option_groups:
-            return {"status": "ERROR", "message_for_agent": f"The item '{name_en}' has no required options to configure."}
+        if not all_option_groups:
+            return {"status": "ERROR", "message_for_agent": f"The item '{name_en}' has no options to configure."}
 
         self.active_items[call_sid] = {
             "item_name": name_en,
             "quantity": quantity,
             "dish_details": dish_details,
-            "required_option_groups": required_option_groups,
+            "option_groups_to_process": all_option_groups,
             "current_step": 0,
             "selections": {}
         }
-        logger.info(f"Started item '{name_en}' for call {call_sid}. Requires {len(required_option_groups)} selections.")
+        logger.info(f"Started item '{name_en}' for call {call_sid}. Asking for {len(all_option_groups)} option groups.")
         
         return self.get_next_question(call_sid)
 
@@ -67,7 +64,7 @@ class OrderManager:
             return {"status": "ERROR", "message_for_agent": "There is no active item to make a selection for."}
 
         item = self.active_items[call_sid]
-        current_group = item["required_option_groups"][item["current_step"]]
+        current_group = item["option_groups_to_process"][item["current_step"]]
         group_name = _get_english_name(current_group.get("name"), "the current option")
 
         raw_options = [_get_english_name(opt.get("name"), "") for opt in current_group.get("options", [])]
@@ -105,7 +102,7 @@ class OrderManager:
         item = self.active_items[call_sid]
         
         # Check if all required steps are completed
-        if item["current_step"] >= len(item["required_option_groups"]):
+        if item["current_step"] >= len(item["option_groups_to_process"]):
             # Finalize the item and add it to the cart
             self.add_item_to_cart(call_sid, item["item_name"], item["quantity"], item["selections"])
             self.clear_active_item(call_sid)
@@ -118,7 +115,7 @@ class OrderManager:
             }
 
         # Ask the next question
-        current_group = item["required_option_groups"][item["current_step"]]
+        current_group = item["option_groups_to_process"][item["current_step"]]
         group_name = _get_english_name(current_group.get("name"), "the next option")
         
         raw_options = [_get_english_name(opt.get("name"), "") for opt in current_group.get("options", [])]
