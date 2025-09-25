@@ -15,10 +15,13 @@ import uuid
 from app.services.deepgram_service import DeepgramService
 from app.utils.twilio import redirect_call
 from app.config import settings
-from app.handlers.english_tool_logic import FINAL_AUDIO_MARK_NAME
+from app.handlers.english_tool_logic import FINAL_AUDIO_MARK_NAME, handle_function_call
 from app.utils.twilio import end_call
-from app.services.call_state_service import remove_call_state, get_and_clear_next_tool, clear_next_tool
+from app.services.call_state_service import remove_call_state, get_and_clear_next_tool, clear_next_tool, register_call, register_media_event, register_tts_started
+from app.services.database_service import save_call_start, save_utterance, save_call_end
+from app.utils.database import upload_audio_to_s3
 from starlette.websockets import WebSocketState
+
 from app.handlers.english_tool_logic import clean_text_for_tts
 from app.handlers.combo_order_manager import combo_order_manager
 from app.handlers.order_manager import order_manager
@@ -129,7 +132,6 @@ class DeepgramEnglishAudioHandler():
                 
             if self.call_sid:
                 logger.info(f"Removing call state for {self.call_sid} at end of processing loop.")
-                from app.services.call_state_service import remove_call_state
                 await remove_call_state(self.call_sid) 
                 logger.info(f"Removed call state for {self.call_sid}")
                 
@@ -225,14 +227,12 @@ class DeepgramEnglishAudioHandler():
             logger.info(f"Call started: {self.call_sid}, Stream: {self.stream_sid}, Caller: {self.caller_phone}")
             
             try:
-                from app.services.call_state_service import register_call
                 await register_call(self.call_sid, self.stream_sid, self.caller_phone)
                 logger.info(f"Registered call {self.call_sid} with call state service")
             except Exception as e:
                 logger.error(f"Error registering call with state service: {e}")
             
             try:
-                from app.services.database_service import save_call_start
                 await save_call_start(self.call_sid, self.caller_phone)
                 logger.info(f"Saved call start: {self.call_sid}")
             except Exception as e:
@@ -282,7 +282,6 @@ class DeepgramEnglishAudioHandler():
                 if state and state in ["ended", "completed"]:
                     logger.info(f"Media track {track} state changed to {state} - potential TTS completion")
                     try:
-                        from app.services.call_state_service import register_media_event
                         if self.stream_sid:
                             await register_media_event(self.stream_sid, "media", media_data)
                             logger.info(f"Registered media completion event for {self.stream_sid}")
@@ -326,8 +325,6 @@ class DeepgramEnglishAudioHandler():
         if self.call_sid and self.complete_audio_buffer:
             try:
                 logger.info(f"Uploading call audio to S3 for call_sid: {self.call_sid}, size: {len(self.complete_audio_buffer)} bytes")
-                from app.utils.database import upload_audio_to_s3
-                
                 audio_url = await upload_audio_to_s3(self.call_sid, bytes(self.complete_audio_buffer))
                 
                 if audio_url:
@@ -343,7 +340,6 @@ class DeepgramEnglishAudioHandler():
         
         if self.call_sid:
             try:
-                from app.services.database_service import save_call_end
                 await save_call_end(self.call_sid, audio_url)
                 logger.info(f"Saved call end with audio URL: {self.call_sid}")
             except Exception as e:
@@ -484,7 +480,6 @@ class DeepgramEnglishAudioHandler():
                 logger.info(f"TRANSCRIPT (user): {transcript} (confidence: {confidence:.2f})")
                 if self.call_sid:
                     try:
-                        from app.services.database_service import save_utterance
                         await save_utterance(self.call_sid, "user", transcript, confidence)
                     except Exception as e:
                         logger.error(f"Error saving utterance: {e}")
@@ -506,7 +501,6 @@ class DeepgramEnglishAudioHandler():
                 # For now, just save the utterance
                 if self.call_sid:
                     try:
-                        from app.services.database_service import save_utterance
                         await save_utterance(self.call_sid, "agent", response_text) # role is "assistant"
                     except Exception as e:
                         logger.error(f"Error saving agent ConversationText utterance: {e}")
@@ -526,7 +520,6 @@ class DeepgramEnglishAudioHandler():
                 if is_final_message_flag and utterance_id and self.call_sid:
                     logger.info(f"Detected final TTS message with utterance_id: {utterance_id}")
                     try:
-                        from app.services.call_state_service import register_tts_started
                         await register_tts_started(self.stream_sid, utterance_id)
                         logger.info(f"Registered TTS start for final message: {utterance_id}")
                     except Exception as e:
@@ -534,7 +527,6 @@ class DeepgramEnglishAudioHandler():
                 
                 if self.call_sid: # Save if not already saved by ConversationText handler
                     try:
-                        from app.services.database_service import save_utterance
                         await save_utterance(self.call_sid, "agent", response_text)
                     except Exception as e:
                         logger.error(f"Error saving agent AgentResponse utterance: {e}")
@@ -629,7 +621,6 @@ class DeepgramEnglishAudioHandler():
                         logger.info(f"STATE OVERRIDE: Forcing use of tool '{next_tool_override}' instead of agent-selected '{function_name}' for call {self.call_sid}")
                         reformatted_function_request["function_name"] = next_tool_override
                     
-                    from app.handlers.english_tool_logic import handle_function_call
                     await handle_function_call(
                         reformatted_function_request,
                         self.deepgram_service,

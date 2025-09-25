@@ -12,6 +12,31 @@ class ComboOrderManager:
         self.completed_combos: Dict[str, Dict[str, Any]] = {}
         # The static menu is no longer loaded here.
 
+    def _is_protein_group(self, group_name: str) -> bool:
+        """
+        Identifies if an option group is for a protein selection in a fixed-price combo.
+        It specifically looks for keywords that indicate a main choice, excluding free items.
+        """
+        if not group_name:
+            return False
+        
+        group_name_lower = group_name.lower()
+        
+        # Exclude groups that are explicitly for free items.
+        if "free" in group_name_lower:
+            return False
+            
+        # Keywords that strongly indicate a protein choice in the context of these combos.
+        protein_keywords = ["choose one", "included", "pick 1 pound", "choose your crab", "half a pound"]
+        
+        return any(keyword in group_name_lower for keyword in protein_keywords)
+
+    def _is_free_item_group(self, group_name: str) -> bool:
+        """Identifies if an option group is for a free item selection."""
+        if not group_name:
+            return False
+        return "free" in group_name.lower()
+
     def add_completed_combo(self, call_sid: str, order: Dict[str, Any]):
         self.completed_combos[call_sid] = order
 
@@ -54,6 +79,15 @@ class ComboOrderManager:
             }
         else:
             self.active_orders[call_sid]["selections"]["fixed_combo_selections"] = []
+            # Initialize counters for contextual prompting
+            self.active_orders[call_sid]["protein_choice_count"] = 0
+            self.active_orders[call_sid]["free_item_count"] = 0
+            
+            # Pre-calculate the number of free items
+            option_groups = dish_details.get("optionGroups", [])
+            num_free_items = sum(1 for group in option_groups if self._is_free_item_group(self._get_display_name(group.get("name", {}))))
+            self.active_orders[call_sid]["num_free_items"] = num_free_items
+
             self.active_orders[call_sid]["state"] = "AWAITING_OPTION_CHOICE"
             return self.get_next_question(call_sid)
 
@@ -640,14 +674,16 @@ class ComboOrderManager:
 
     def _handle_more_proteins(self, user_input: str, order: Dict[str, Any], call_sid: str) -> Dict[str, Any]:
         user_input_lower = user_input.lower().strip()
+        # Normalize the input by removing punctuation
+        normalized_input = re.sub(r'[^\w\s]', '', user_input_lower)
         
         # More robust check for negative/finished responses.
         negative_phrases = [
-            "no", "nope", "done", "no that's it", "that is all", "no that's all", 
-            "im good", "i'm good", "no more", "no thanks", "no thank you", "that's it"
+            "no", "nope", "done", "no thats it", "that is all", "no thats all", 
+            "im good", "im good", "no more", "no thanks", "no thank you", "thats it"
         ]
 
-        is_negative = any(phrase in user_input_lower for phrase in negative_phrases)
+        is_negative = any(phrase in normalized_input for phrase in negative_phrases)
 
         if is_negative:
             # User is done adding proteins. Move directly to the next step.
@@ -720,44 +756,56 @@ class ComboOrderManager:
         logger.info(f"get_next_question for {dish_name_lower}: is_fixed_combo={is_fixed_combo}, current_step={order['current_step']}")
 
         option_groups = order["dish_details"].get("optionGroups", [])
-        
-        if "choose_one_count" not in order:
-            order["choose_one_count"] = 0
 
         while order["current_step"] < len(option_groups):
             current_group = option_groups[order["current_step"]]
-            
             group_display_name = self._get_display_name(current_group.get("name", {}))
-            group_name_lower = group_display_name.lower() if group_display_name else ""
+            
             logger.info(f"Processing group: '{group_display_name}' at step {order['current_step']}")
 
-            if is_customized_combo and ("choose one" in group_name_lower or "half a pound" in group_name_lower):
+            # Skip groups irrelevant to customized combos
+            if is_customized_combo and self._is_protein_group(group_display_name):
                 order["current_step"] += 1
                 continue
 
             order["state"] = "AWAITING_OPTION_CHOICE"
-            
             message = ""
-            if is_fixed_combo and "choose one" in group_name_lower and "free" not in group_name_lower:
-                order["choose_one_count"] += 1
-                protein_prompts = {
-                    1: "What would you like to choose for your first protein?",
-                    2: "And for your second protein choice?",
-                    3: "Finally, what's your third protein choice?"
-                }
-                message = protein_prompts.get(order["choose_one_count"], f"Please choose another item.")
-                logger.info(f"Generated protein prompt for count {order['choose_one_count']}: '{message}'")
-            elif is_fixed_combo and "pick 1 free" in group_name_lower:
-                message = "You also get a free item with your combo. Would you like corn, potatoes, or sausage?"
-                logger.info("Generated 'pick 1 free' prompt.")
-            elif is_fixed_combo and "choose one for free" in group_name_lower:
-                message = "You get one more free item. Which would you like?"
-                logger.info("Generated 'choose one for free' prompt.")
-            
+
+            # --- Start of New Contextual Prompting Logic ---
+            if is_fixed_combo:
+                if self._is_protein_group(group_display_name):
+                    order["protein_choice_count"] += 1
+                    count = order["protein_choice_count"]
+                    
+                    ordinal_map = {1: "first", 2: "second", 3: "third"}
+                    ordinal = ordinal_map.get(count, f"{count}th")
+                    
+                    if count == 1:
+                        message = f"For your {order['dish_name']}, what would you like for your {ordinal} protein choice?"
+                    else:
+                        message = f"And for your {ordinal} protein choice?"
+                    logger.info(f"Generated protein prompt for count {count}: '{message}'")
+
+                elif self._is_free_item_group(group_display_name):
+                    # Only ask for a free item if we haven't already collected enough
+                    if order.get("free_item_count", 0) < order.get("num_free_items", 0):
+                        order["free_item_count"] += 1
+                        if order["free_item_count"] == 1:
+                            message = "You also get a free item with your combo. Would you like corn, potatoes, or sausage?"
+                        else:
+                            message = "You get another free item. What would you like?"
+                        logger.info("Generated free item prompt.")
+                    else:
+                        # If we have enough free items, skip this group and move to the next
+                        order["current_step"] += 1
+                        continue
+
+            # Fallback for non-protein/non-free groups or customized combos
             if not message:
                 cleaned_group_name = self._clean_prompt_text(group_display_name)
-                message = f"For your {order['dish_name']}, what would you like for {cleaned_group_name}?"
+                message = f"For your {order['dish_name']}, what would you like for the {cleaned_group_name}?"
                 logger.info(f"Generated default prompt for group '{cleaned_group_name}'")
+            # --- End of New Logic ---
 
             options = [self._clean_option_name_for_tts(self._get_display_name(opt.get("name", {}))) for opt in current_group.get("options", [])]
             cleaned_options = [self._clean_prompt_text(opt) for opt in options if opt]

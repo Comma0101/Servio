@@ -280,7 +280,7 @@ LIST_DISHES_BY_CATEGORY_TOOL_SCHEMA_CN_OPENAI: Dict[str, Any] = {
 
 ORDER_SUMMARY_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
     "name": "order_summary", # Keep name generic if logic is shared
-    "description": "Use this function to summarize the entire order once the customer has explicitly finished ordering. Do not use this function to confirm a single item. Wait for the user to say 'that's all' or 'I'm done' before calling this function with a 'DONE' status.",
+    "description": "CRITICAL: Use this tool ONLY for the FINAL summary of the ENTIRE order. DO NOT use this if a combo is being built. Using this tool mid-combo will break the order.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -417,7 +417,7 @@ PROCESS_ORDER_SELECTION_TOOL_SCHEMA: Dict[str, Any] = {
 
 PROCESS_COMBO_SELECTION_TOOL_SCHEMA: Dict[str, Any] = {
     "name": "handle_combo_item_selection",
-    "description": "**MUST be used for ALL selections within a 'Customized Combo' order.** This is the only tool for handling proteins (e.g., 'shrimp'), sizes (e.g., '1 pound'), affirmations ('yes'), or negations ('no, that's it'). After a negation, the system will provide the next step; do not ask if the user wants to finish the order.",
+    "description": "This is the primary tool to use for every step of building a combo. If the user says 'no' or 'that's it' in response to a combo question, you MUST use this tool.",
     "parameters": {
         "type": "object",
         "properties": {

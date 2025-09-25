@@ -13,7 +13,6 @@ import traceback
 
 # Import services and handlers
 from app.services.deepgram_service import DeepgramService
-from app.handlers.deepgram_english_audio_handler_refactored import DeepgramEnglishAudioHandler
 from app.handlers.chinese_audio_openai_handler import ChineseAudioOpenAIHandler
 from app.handlers.chinese_audio_bytedance_handler import ChineseAudioByteDanceHandler
 from app.utils.constants import get_restaurant_config, get_restaurant_menu
@@ -551,6 +550,7 @@ async def handle_media_stream(websocket: WebSocket):
         # The 'if current_language == "chinese":' block is removed.
 
         # English - use Deepgram
+        from app.handlers.deepgram_english_audio_handler_refactored import DeepgramEnglishAudioHandler
         logger.info("Creating English audio handler with Deepgram")
         
         # Create Deepgram configuration for V1 API

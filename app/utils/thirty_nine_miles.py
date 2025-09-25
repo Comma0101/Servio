@@ -25,6 +25,29 @@ CACHE_DURATION_HOURS = 24
 
 # --- Pydantic Models for Order Creation ---
 
+def _normalize_combo_query(query: str) -> str:
+    """
+    Normalizes different ways of saying a combo into a standard format.
+    e.g., "combo number two", "combo two" -> "COMBO #2"
+    """
+    # This regex looks for "combo", optional "number" or "#", and a number word/digit.
+    match = re.search(r'combo\s*(?:number|#)?\s*(\w+)', query, re.IGNORECASE)
+    if not match:
+        return query
+
+    number_str = match.group(1)
+    number_map = {
+        "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+        "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10"
+    }
+    
+    # Convert word to digit if it's in the map, otherwise assume it's already a digit.
+    digit = number_map.get(number_str.lower(), number_str)
+    
+    normalized_query = f"COMBO #{digit}"
+    logger.info(f"Normalized combo query '{query}' to '{normalized_query}'.")
+    return normalized_query
+
 class TextStore(BaseModel):
     en: Optional[str] = None
     zh: Optional[str] = None
@@ -158,13 +181,11 @@ async def _find_dish(portal_id: str, name_to_find: str, language: Literal['en', 
     Generic internal function to find a dish by its name in the specified language.
     Performs an exact match first, then a 'contains' match.
     """
-    # Normalize common aliases before searching
+    # --- START: NEW NORMALIZATION AND SEARCH LOGIC ---
+    original_query = name_to_find
     if language == 'en':
-        search_term_lower_for_alias = name_to_find.lower().strip()
-        if search_term_lower_for_alias == "combo1" or search_term_lower_for_alias == "combo number one":
-            name_to_find = "COMBO #1"
-            logger.info(f"Normalized alias '{search_term_lower_for_alias}' to '{name_to_find}'.")
-            
+        name_to_find = _normalize_combo_query(name_to_find)
+
     menu_response = await get_extracted_dishes(portal_id)
     if not (menu_response and menu_response.get("success")):
         logger.error(f"Cannot find dish '{name_to_find}'; failed to retrieve menu for portal {portal_id}.")
@@ -181,16 +202,17 @@ async def _find_dish(portal_id: str, name_to_find: str, language: Literal['en', 
             logger.info(f"Found exact {language} match for '{name_to_find}'.")
             return [dish]
 
-    # 2. Combo match using is_combo flag and fuzzy matching
+    # 2. If no exact match, fall back to fuzzy matching for combos
     if "combo" in search_term_lower and language == 'en':
         combo_dishes = [dish for dish in all_dishes if dish.get("is_combo")]
         if combo_dishes:
             combo_names = [dish.get(name_key, "") for dish in combo_dishes]
-            best_match_name, score = process.extractOne(name_to_find, combo_names)
+            # Use the original, un-normalized query for fuzzy matching
+            best_match_name, score = process.extractOne(original_query, combo_names)
             if score > 80: # Confidence threshold
                 best_match_dish = next((dish for dish in combo_dishes if dish.get(name_key, "") == best_match_name), None)
                 if best_match_dish:
-                    logger.info(f"Found combo match for '{name_to_find}' with score {score}. Best match: '{best_match_name}'")
+                    logger.info(f"Found combo match for '{original_query}' with score {score}. Best match: '{best_match_name}'")
                     return [best_match_dish]
 
     # 3. "Contains" match (case-insensitive for English)

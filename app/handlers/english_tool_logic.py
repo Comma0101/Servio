@@ -84,12 +84,30 @@ def _get_english_name(name_dict: Dict[str, Any], default: str = "") -> str:
     if not name_dict:
         return default
     name_en = name_dict.get("en")
-    if name_en and name_en.strip():
+    if name_en and isinstance(name_en, str) and name_en.strip():
         return name_en
     name_zh = name_dict.get("zh")
-    if name_zh and name_zh.strip():
+    if name_zh and isinstance(name_zh, str) and name_zh.strip():
         return name_zh
     return default
+
+def _clean_option_for_tts(option_name: str) -> str:
+    """Cleans up an option name for more natural-sounding text-to-speech."""
+    if not option_name:
+        return ""
+    # This regex removes prefixes like '1 lb.', '1 (pc).', and '(3pc)' for cleaner TTS
+    cleaned = re.sub(r'^\d+\s?(\(pc\))?\.?\s?(lb|ib|in)\.?\s*|\s*\(\d+pc\)$', '', option_name, flags=re.IGNORECASE).strip()
+    return cleaned
+
+def _is_protein_group(group_name: str) -> bool:
+    """Checks if an option group is for selecting proteins based on a list of known keywords."""
+    protein_group_keywords = ["choose one", "included", "meat option", "choose your crab", "pick 1 pound"]
+    
+    # Also check for "choose" and "one" separately to catch variations
+    if "choose" in group_name.lower() and "one" in group_name.lower():
+        return True
+        
+    return any(keyword in group_name.lower() for keyword in protein_group_keywords)
 
 def is_primarily_english(text: str) -> bool:
     """
@@ -347,8 +365,9 @@ async def handle_check_menu_item_english(
                         output_payload["added_to_cart"] = True
                         output_payload["message_for_agent"] = f"Okay, I've added {quantity} {name_en_to_use} to your order."
                     # --- START OF NEW LOGIC ---
-                    # Check if the item is the special "Customized Combo"
-                    elif "customized combo" in name_en_to_use.lower():
+                    # Check if the item is one of the special combos that needs the combo manager
+                    name_lower = name_en_to_use.lower()
+                    if "customized combo" in name_lower or "combo #1" in name_lower or "combo #2" in name_lower or "combo #3" in name_lower:
                         # Fetch the full menu to pass to the specialized manager
                         live_menu_response = await get_extracted_dishes(portal_id)
                         live_menu_data = live_menu_response.get("data", [])
@@ -440,6 +459,12 @@ async def handle_standard_item_selection(
         logger.info(f"Routing selection to generic OrderManager for call_sid: {call_sid}")
         response_payload = order_manager.process_selection(user_input, call_sid)
 
+        # --- START OF FIX ---
+        # Ensure the AI gets the updated cart to prevent stale summaries.
+        if response_payload.get("status") == "ITEM_COMPLETE":
+            response_payload["current_cart"] = order_manager.get_cart(call_sid)
+        # --- END OF FIX ---
+
     response = {
         "type": "FunctionCallResponse",
         "id": function_call_id,
@@ -484,6 +509,11 @@ async def handle_combo_item_selection(
                     item_to_add.get("options", {})
                 )
                 logger.info(f"Moved completed combo '{item_to_add.get('name')}' to main cart for call {call_sid}.")
+            
+            # --- START OF FIX ---
+            # Ensure the AI gets the updated cart to prevent stale summaries.
+            response_payload["current_cart"] = order_manager.get_cart(call_sid)
+            # --- END OF FIX ---
             
             # Explicitly clear the state override now that the combo flow is complete
             await clear_next_tool(call_sid)
@@ -920,26 +950,28 @@ async def handle_order_summary_thirty_nine_miles_en(
                         item_options = item.get("options", {})
                         has_selection_for_group = False
                         
-                        # Get all possible option names for the current required group, using the safe getter
-                        possible_option_names = {_get_english_name(opt.get("name", {})) for opt in group.get("options", [])}
-                        # Filter out empty strings that might result from the safe getter
-                        possible_option_names = {name for name in possible_option_names if name}
-
-                        # The cart stores selections as {group_name: selection_name}.
-                        # We need to check if the group_name from the menu exists as a key in the item's options.
-                        if isinstance(item_options, dict):
-                            if group_name_en in item_options:
-                                # Now, also validate that the selected value is a valid option for that group.
-                                selected_value = item_options[group_name_en]
-                                if selected_value in possible_option_names:
-                                    has_selection_for_group = True
-                                else:
-                                    logger.warning(f"Validation mismatch: Selection '{selected_value}' for group '{group_name_en}' is not in the list of possible options: {possible_option_names}")
-                        
-                        # This block handles older or different data formats, kept for safety but the primary logic is above.
-                        elif isinstance(item_options, list): # For simple items with options
-                            if any(opt in possible_option_names for opt in item_options):
+                        # --- START: ROBUST VALIDATION LOGIC ---
+                        # Special check for fixed-price combo protein selections
+                        is_protein_group = _is_protein_group(group_name_en) and "free" not in group_name_en.lower()
+                        if "combo #" in item_name.lower() and is_protein_group:
+                            if item_options.get("fixed_combo_selections"):
                                 has_selection_for_group = True
+                        else:
+                            # Original validation for all other items and options
+                            possible_option_names = {_get_english_name(opt.get("name", {})) for opt in group.get("options", [])}
+                            possible_option_names = {name for name in possible_option_names if name}
+
+                            if isinstance(item_options, dict):
+                                if group_name_en in item_options:
+                                    selected_value = item_options[group_name_en]
+                                    if selected_value in possible_option_names:
+                                        has_selection_for_group = True
+                                    else:
+                                        logger.warning(f"Validation mismatch: Selection '{selected_value}' for group '{group_name_en}' is not in the list of possible options: {possible_option_names}")
+                            elif isinstance(item_options, list):
+                                if any(opt in possible_option_names for opt in item_options):
+                                    has_selection_for_group = True
+                        # --- END: ROBUST VALIDATION LOGIC ---
 
                         if not has_selection_for_group:
                             error_msg = f"Order rejected. The item '{item_name}' is missing a selection for {display_group_name}. You must ask the user for their choice."
@@ -1010,16 +1042,28 @@ async def handle_order_summary_thirty_nine_miles_en(
                     reconstructed_option_groups = []
                     item_price = float(pos_dish_details.get("price", 0.0))
 
+                    protein_option_groups_from_menu = []
+                    for g in pos_dish_details.get("optionGroups", []):
+                        name = g.get("name", {})
+                        if not name:
+                            continue
+                        
+                        en_name = name.get("en")
+                        zh_name = name.get("zh")
+                        
+                        # Check English name first
+                        if isinstance(en_name, str) and "choose one" in en_name.lower():
+                            protein_option_groups_from_menu.append(g)
+                            continue
+                            
+                        # If not in English, check Chinese name
+                        if isinstance(zh_name, str) and "choose one" in zh_name.lower():
+                            protein_option_groups_from_menu.append(g)
+
                     if isinstance(pos_options, dict):
                         # Handle the special list of protein selections first
                         if 'fixed_combo_selections' in pos_options:
                             protein_selections = pos_options.pop('fixed_combo_selections')
-                            
-                            protein_option_groups_from_menu = [
-                                g for g in all_option_groups_from_menu 
-                                if "choose one" in g.get("name", {}).get("en", "").lower() 
-                                and "free" not in g.get("name", {}).get("en", "").lower()
-                            ]
                             
                             all_possible_protein_options = []
                             for group in protein_option_groups_from_menu:
@@ -1027,7 +1071,7 @@ async def handle_order_summary_thirty_nine_miles_en(
 
                             matched_protein_options = []
                             for selected_protein in protein_selections:
-                                found_option = next((opt for opt in all_possible_protein_options if opt.get("name", {}).get("en", "") == selected_protein), None)
+                                found_option = next((opt for opt in all_possible_protein_options if _get_english_name(opt.get("name", {})) == selected_protein), None)
                                 if found_option:
                                     matched_protein_options.append(MenuProductOption(**found_option))
                                     item_price += found_option.get("adjustPrice", 0.0)
@@ -1042,7 +1086,7 @@ async def handle_order_summary_thirty_nine_miles_en(
 
                         # Now, process the rest of the options (flavor, spice, etc.)
                         for selection_key, selected_values in pos_options.items():
-                            target_group = next((g for g in all_option_groups_from_menu if g.get("name", {}).get("en", "").strip().lower() == selection_key.strip().lower()), None)
+                            target_group = next((g for g in all_option_groups_from_menu if _get_english_name(g.get("name", {})).strip().lower() == selection_key.strip().lower()), None)
                             
                             if not target_group:
                                 logger.warning(f"Could not find any option group named '{selection_key}' for combo '{item_name_en}'.")
@@ -1059,7 +1103,7 @@ async def handle_order_summary_thirty_nine_miles_en(
                                 if not selected_value_name:
                                     continue
 
-                                found_option = next((opt for opt in all_possible_options if opt.get("name", {}).get("en", "") == selected_value_name), None)
+                                found_option = next((opt for opt in all_possible_options if _get_english_name(opt.get("name", {})) == selected_value_name), None)
                                 
                                 if found_option:
                                     matched_options_for_group.append(MenuProductOption(**found_option))
@@ -1166,7 +1210,47 @@ async def handle_order_summary_thirty_nine_miles_en(
                 if isinstance(external_pos_order_id, str) and external_pos_order_id:
                     logger.info(f"Successfully placed English order with 39Miles. External Order ID: {external_pos_order_id}. Call: {call_sid}")
                     
-                    final_confirmation_text_for_tts = f"Okay, your order {external_pos_order_id} is confirmed. It includes {len(processed_pos_items)} item(s) for a total of ${final_payment_amount:.2f}. It will be ready for pickup shortly. Thank you for your call, goodbye!"
+                    # --- START: ENHANCED TTS CONFIRMATION ---
+                    summary_parts = []
+                    for item in english_ai_items:
+                        item_name = item.get("name")
+                        options = item.get("options", {})
+                        
+                        options_list = []
+                        if isinstance(options, dict):
+                            # Handle fixed combo proteins first
+                            if 'fixed_combo_selections' in options:
+                                options_list.extend([_clean_option_for_tts(opt) for opt in options.get('fixed_combo_selections', [])])
+                            
+                            # Handle all other options
+                            for key, value in options.items():
+                                if key.lower() == 'proteins' and isinstance(value, list):
+                                    # Special handling for customized combo proteins
+                                    protein_details = []
+                                    for protein in value:
+                                        if isinstance(protein, dict):
+                                            name = protein.get('name', '')
+                                            size = protein.get('size', '')
+                                            protein_details.append(f"{size} of {name}")
+                                    if protein_details:
+                                        options_list.append(", ".join(protein_details))
+                                elif key.lower() != 'fixed_combo_selections':
+                                    # General handling for other options (flavor, spice, etc.)
+                                    if isinstance(value, str):
+                                        options_list.append(_clean_option_for_tts(value))
+                                    elif value is not None:
+                                        # Fallback for unexpected types, prevents crash
+                                        options_list.append(str(value))
+                        
+                        if options_list:
+                            summary_parts.append(f"{item_name} with {', '.join(options_list)}")
+                        else:
+                            summary_parts.append(item_name)
+                    
+                    order_summary_str = "; ".join(summary_parts)
+                    final_confirmation_text_for_tts = f"Okay, your order {external_pos_order_id} is confirmed. It includes {order_summary_str}, for a total of ${final_payment_amount:.2f}. It will be ready for pickup shortly. Thank you for your call, goodbye!"
+                    # --- END: ENHANCED TTS CONFIRMATION ---
+
                     response_content_payload = {"status": "OK", "order_placed": True, "external_order_id": external_pos_order_id, "internal_order_id": internal_db_id, "message_for_agent": final_confirmation_text_for_tts}
                     
                     if deepgram_service:
