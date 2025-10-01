@@ -27,24 +27,29 @@ CACHE_DURATION_HOURS = 24
 
 def _normalize_combo_query(query: str) -> str:
     """
-    Normalizes different ways of saying a combo into a standard format.
-    e.g., "combo number two", "combo two" -> "COMBO #2"
+    Normalizes different ways of saying a numbered item into a standard format.
+    e.g., "combo number two", "lunch special one" -> "COMBO #2", "LUNCH SPECIAL #1"
     """
-    # This regex looks for "combo", optional "number" or "#", and a number word/digit.
-    match = re.search(r'combo\s*(?:number|#)?\s*(\w+)', query, re.IGNORECASE)
+    # This regex looks for any phrase, an optional "number" or "#", and a number word/digit at the end.
+    match = re.search(r'(.+?)\s*(?:number|#)?\s*(\w+)$', query, re.IGNORECASE)
     if not match:
         return query
 
-    number_str = match.group(1)
+    phrase = match.group(1).strip()
+    number_str = match.group(2)
+    
     number_map = {
         "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
         "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10"
     }
     
-    # Convert word to digit if it's in the map, otherwise assume it's already a digit.
+    # Verify the last word is a number before normalizing.
+    if number_str.lower() not in number_map and not number_str.isdigit():
+        return query
+
     digit = number_map.get(number_str.lower(), number_str)
     
-    normalized_query = f"COMBO #{digit}"
+    normalized_query = f"{phrase.upper()} #{digit}"
     logger.info(f"Normalized combo query '{query}' to '{normalized_query}'.")
     return normalized_query
 
@@ -198,7 +203,12 @@ async def _find_dish(portal_id: str, name_to_find: str, language: Literal['en', 
     # 1. Exact match (case-insensitive for English)
     for dish in all_dishes:
         dish_name = dish.get(name_key, "")
-        if (language == 'en' and dish_name.lower() == search_term_lower) or (language == 'zh' and dish_name == name_to_find):
+        # Normalize whitespace to handle data entry errors like double spaces
+        normalized_dish_name = " ".join(dish_name.lower().split())
+        normalized_search_term = " ".join(search_term_lower.split())
+
+        if (language == 'en' and normalized_dish_name == normalized_search_term) or \
+           (language == 'zh' and dish_name == name_to_find):
             logger.info(f"Found exact {language} match for '{name_to_find}'.")
             return [dish]
 
@@ -228,7 +238,8 @@ async def _find_dish(portal_id: str, name_to_find: str, language: Literal['en', 
             if dish.get("is_combo"):
                 for group in dish.get("dish_details", {}).get("optionGroups", []):
                     for option in group.get("options", []):
-                        option_name = (option.get("name") or {}).get("en", "").lower()
+                        name_info = option.get("name") or {}
+                        option_name = (name_info.get("en") or name_info.get("zh") or "").lower()
                         if search_term_lower in option_name:
                             logger.info(f"Found '{name_to_find}' as an option in combo '{dish.get(name_key)}'.")
                             # Return the parent combo dish

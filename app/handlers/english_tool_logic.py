@@ -17,7 +17,7 @@ from app.utils.thirty_nine_miles import find_dish_by_english_name, get_extracted
 from app.constants import THIRTY_NINE_MILES_PORTAL_ID_TAKEOUT # Assuming LIMF uses takeout by default
 from app.handlers.order_manager import order_manager # Import the new unified order manager
 from app.handlers.combo_order_manager import combo_order_manager
-from app.services.call_state_service import set_next_tool, clear_next_tool
+from app.services.call_state_service import set_next_tool, clear_next_tool, set_order_placed_flag, has_order_been_placed
 import random # For recommendations
 import re # Added for is_primarily_english
 from typing import List
@@ -189,77 +189,77 @@ async def handle_function_call(
                 portal_id_to_use,
                 call_sid # For logging/DB
             )
-        elif function_name == "list_dishes_by_category_english":
-            portal_id_to_use = None
-            if client_id == "LIMF":
-                portal_id_to_use = THIRTY_NINE_MILES_PORTAL_ID_TAKEOUT
-            # Add other client_id to portal_id mappings here
-            if not portal_id_to_use:
-                logger.error(f"Cannot determine portal_id for client_id: {client_id} in list_dishes_by_category_english")
-                error_output = "Internal configuration error: Cannot determine restaurant portal."
-                response = {
-                    "type": "FunctionCallResponse",
-                    "id": function_call_id,
-                    "name": function_name,
-                    "content": error_output
-                }
-                await deepgram_service.send_json(response)
-                return
-            await handle_list_dishes_by_category_english(
-                function_call_id,
-                function_name, # Pass function_name
-                input_data,
-                deepgram_service,
-                portal_id_to_use,
-                call_sid 
-            )
-        elif function_name == "recommend_dishes_english":
-            portal_id_to_use = None
-            if client_id == "LIMF":
-                portal_id_to_use = THIRTY_NINE_MILES_PORTAL_ID_TAKEOUT
-            # Add other client_id to portal_id mappings here
-            if not portal_id_to_use:
-                logger.error(f"Cannot determine portal_id for client_id: {client_id} in recommend_dishes_english")
-                error_output = "Internal configuration error: Cannot determine restaurant portal."
-                response = {
-                    "type": "FunctionCallResponse",
-                    "id": function_call_id,
-                    "name": function_name,
-                    "content": error_output
-                }
-                await deepgram_service.send_json(response)
-                return
-            await handle_recommend_dishes_english(
-                function_call_id,
-                function_name, # Pass function_name
-                input_data,
-                deepgram_service,
-                portal_id_to_use,
-                call_sid
-            )
-        elif function_name == "get_random_menu_categories_english":
-            portal_id_to_use = None
-            if client_id == "LIMF":
-                portal_id_to_use = THIRTY_NINE_MILES_PORTAL_ID_TAKEOUT
-            # Add other client_id to portal_id mappings here
-            if not portal_id_to_use:
-                logger.error(f"Cannot determine portal_id for client_id: {client_id} in get_random_menu_categories_english")
-                error_output = "Internal configuration error: Cannot determine restaurant portal."
-                response = {
-                    "type": "FunctionCallResponse",
-                    "id": function_call_id,
-                    "name": function_name,
-                    "content": error_output
-                }
-                await deepgram_service.send_json(response)
-                return
-            await handle_get_random_menu_categories_english(
-                function_call_id,
-                function_name,
-                deepgram_service,
-                portal_id_to_use,
-                call_sid
-            )
+        # elif function_name == "list_dishes_by_category_english":
+        #     portal_id_to_use = None
+        #     if client_id == "LIMF":
+        #         portal_id_to_use = THIRTY_NINE_MILES_PORTAL_ID_TAKEOUT
+        #     # Add other client_id to portal_id mappings here
+        #     if not portal_id_to_use:
+        #         logger.error(f"Cannot determine portal_id for client_id: {client_id} in list_dishes_by_category_english")
+        #         error_output = "Internal configuration error: Cannot determine restaurant portal."
+        #         response = {
+        #             "type": "FunctionCallResponse",
+        #             "id": function_call_id,
+        #             "name": function_name,
+        #             "content": error_output
+        #         }
+        #         await deepgram_service.send_json(response)
+        #         return
+        #     await handle_list_dishes_by_category_english(
+        #         function_call_id,
+        #         function_name, # Pass function_name
+        #         input_data,
+        #         deepgram_service,
+        #         portal_id_to_use,
+        #         call_sid 
+        #     )
+        # elif function_name == "recommend_dishes_english":
+        #     portal_id_to_use = None
+        #     if client_id == "LIMF":
+        #         portal_id_to_use = THIRTY_NINE_MILES_PORTAL_ID_TAKEOUT
+        #     # Add other client_id to portal_id mappings here
+        #     if not portal_id_to_use:
+        #         logger.error(f"Cannot determine portal_id for client_id: {client_id} in recommend_dishes_english")
+        #         error_output = "Internal configuration error: Cannot determine restaurant portal."
+        #         response = {
+        #             "type": "FunctionCallResponse",
+        #             "id": function_call_id,
+        #             "name": function_name,
+        #             "content": error_output
+        #         }
+        #         await deepgram_service.send_json(response)
+        #         return
+        #     await handle_recommend_dishes_english(
+        #         function_call_id,
+        #         function_name, # Pass function_name
+        #         input_data,
+        #         deepgram_service,
+        #         portal_id_to_use,
+        #         call_sid
+        #     )
+        # elif function_name == "get_random_menu_categories_english":
+        #     portal_id_to_use = None
+        #     if client_id == "LIMF":
+        #         portal_id_to_use = THIRTY_NINE_MILES_PORTAL_ID_TAKEOUT
+        #     # Add other client_id to portal_id mappings here
+        #     if not portal_id_to_use:
+        #         logger.error(f"Cannot determine portal_id for client_id: {client_id} in get_random_menu_categories_english")
+        #         error_output = "Internal configuration error: Cannot determine restaurant portal."
+        #         response = {
+        #             "type": "FunctionCallResponse",
+        #             "id": function_call_id,
+        #             "name": function_name,
+        #             "content": error_output
+        #         }
+        #         await deepgram_service.send_json(response)
+        #         return
+        #     await handle_get_random_menu_categories_english(
+        #         function_call_id,
+        #         function_name,
+        #         deepgram_service,
+        #         portal_id_to_use,
+        #         call_sid
+        #     )
         elif function_name == "send_menu_link":
             await handle_send_menu_link(
                 function_call_id,
@@ -367,7 +367,7 @@ async def handle_check_menu_item_english(
                     # --- START OF NEW LOGIC ---
                     # Check if the item is one of the special combos that needs the combo manager
                     name_lower = name_en_to_use.lower()
-                    if "customized combo" in name_lower or "combo #1" in name_lower or "combo #2" in name_lower or "combo #3" in name_lower:
+                    if "customized combo" in name_lower or "combo #1" in name_lower or "combo #2" in name_lower or "combo #3" in name_lower or "family combo" in name_lower:
                         # Fetch the full menu to pass to the specialized manager
                         live_menu_response = await get_extracted_dishes(portal_id)
                         live_menu_data = live_menu_response.get("data", [])
@@ -532,235 +532,235 @@ async def handle_combo_item_selection(
     logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}): {response['content']}")
 
 
-async def handle_list_dishes_by_category_english(
-    function_call_id: str,
-    function_name: str, # Added function_name
-    input_data: Dict[str, Any],
-    deepgram_service,
-    portal_id: str,
-    call_sid: Optional[str]
-):
-    """Handles the list_dishes_by_category_english function call."""
-    category_name_en = input_data.get("category_name_en")
-    logger.info(f"Handling {function_name} for category '{category_name_en}' in portal {portal_id} (CallSid: {call_sid})")
+# async def handle_list_dishes_by_category_english(
+#     function_call_id: str,
+#     function_name: str, # Added function_name
+#     input_data: Dict[str, Any],
+#     deepgram_service,
+#     portal_id: str,
+#     call_sid: Optional[str]
+# ):
+#     """Handles the list_dishes_by_category_english function call."""
+#     category_name_en = input_data.get("category_name_en")
+#     logger.info(f"Handling {function_name} for category '{category_name_en}' in portal {portal_id} (CallSid: {call_sid})")
 
-    output_payload = {
-        "category_name_en": category_name_en,
-        "dishes": [],
-        "message_for_agent": f"Could not find dishes for category '{category_name_en}'."
-    }
+#     output_payload = {
+#         "category_name_en": category_name_en,
+#         "dishes": [],
+#         "message_for_agent": f"Could not find dishes for category '{category_name_en}'."
+#     }
 
-    if not category_name_en:
-        logger.warning("category_name_en not provided in list_dishes_by_category_english call.")
-        output_payload["message_for_agent"] = "Category name was not provided by the agent."
-    else:
-        try:
-            menu_response = await get_extracted_dishes(portal_id)
-            if menu_response and menu_response.get("success"):
-                all_dishes_from_pos = menu_response.get("data", [])
+#     if not category_name_en:
+#         logger.warning("category_name_en not provided in list_dishes_by_category_english call.")
+#         output_payload["message_for_agent"] = "Category name was not provided by the agent."
+#     else:
+#         try:
+#             menu_response = await get_extracted_dishes(portal_id)
+#             if menu_response and menu_response.get("success"):
+#                 all_dishes_from_pos = menu_response.get("data", [])
                 
-                # Filter by category first
-                category_dishes = [
-                    dish for dish in all_dishes_from_pos
-                    if dish.get("category_name_en", "").lower() == category_name_en.lower()
-                ]
+#                 # Filter by category first
+#                 category_dishes = [
+#                     dish for dish in all_dishes_from_pos
+#                     if dish.get("category_name_en", "").lower() == category_name_en.lower()
+#                 ]
                 
-                if category_dishes:
-                    valid_dishes = []
-                    for dish_detail in category_dishes:
-                        # The get_extracted_dishes function already provides a direct dish_name_en
-                        name_to_check = dish_detail.get("dish_name_en")
-                        if name_to_check and is_primarily_english(name_to_check):
-                            valid_dishes.append({
-                                "name_en": name_to_check,
-                                "price": dish_detail.get("price")
-                            })
+#                 if category_dishes:
+#                     valid_dishes = []
+#                     for dish_detail in category_dishes:
+#                         # The get_extracted_dishes function already provides a direct dish_name_en
+#                         name_to_check = dish_detail.get("dish_name_en")
+#                         if name_to_check and is_primarily_english(name_to_check):
+#                             valid_dishes.append({
+#                                 "name_en": name_to_check,
+#                                 "price": dish_detail.get("price")
+#                             })
                     
-                    if valid_dishes:
-                        output_payload["dishes"] = valid_dishes
-                        dish_names_str = ", ".join([d["name_en"] for d in valid_dishes])
-                        output_payload["message_for_agent"] = f"In the '{category_name_en}' category, we have: {dish_names_str}."
-                        logger.info(f"Found {len(valid_dishes)} dishes for category '{category_name_en}' in portal {portal_id}.")
-                    else:
-                        logger.info(f"Found dishes for category '{category_name_en}', but none with valid English names.")
-                        output_payload["message_for_agent"] = f"Sorry, I couldn't find any English named dishes in the '{category_name_en}' category."
-                else:
-                    logger.info(f"No dishes found for category '{category_name_en}' in portal {portal_id}.")
-                    output_payload["message_for_agent"] = f"Sorry, I couldn't find any dishes in the '{category_name_en}' category."
-            else:
-                error_msg = menu_response.get('message', 'Unknown error') if menu_response else "No response"
-                logger.error(f"Failed to get extracted dishes for portal {portal_id}: {error_msg}")
-                output_payload["message_for_agent"] = "There was an error retrieving the menu."
-        except Exception as e:
-            logger.error(f"Error processing {function_name} for '{category_name_en}': {e}", exc_info=True)
-            output_payload["message_for_agent"] = "An error occurred while fetching category dishes."
-            output_payload["error_details"] = str(e)
+#                     if valid_dishes:
+#                         output_payload["dishes"] = valid_dishes
+#                         dish_names_str = ", ".join([d["name_en"] for d in valid_dishes])
+#                         output_payload["message_for_agent"] = f"In the '{category_name_en}' category, we have: {dish_names_str}."
+#                         logger.info(f"Found {len(valid_dishes)} dishes for category '{category_name_en}' in portal {portal_id}.")
+#                     else:
+#                         logger.info(f"Found dishes for category '{category_name_en}', but none with valid English names.")
+#                         output_payload["message_for_agent"] = f"Sorry, I couldn't find any English named dishes in the '{category_name_en}' category."
+#                 else:
+#                     logger.info(f"No dishes found for category '{category_name_en}' in portal {portal_id}.")
+#                     output_payload["message_for_agent"] = f"Sorry, I couldn't find any dishes in the '{category_name_en}' category."
+#             else:
+#                 error_msg = menu_response.get('message', 'Unknown error') if menu_response else "No response"
+#                 logger.error(f"Failed to get extracted dishes for portal {portal_id}: {error_msg}")
+#                 output_payload["message_for_agent"] = "There was an error retrieving the menu."
+#         except Exception as e:
+#             logger.error(f"Error processing {function_name} for '{category_name_en}': {e}", exc_info=True)
+#             output_payload["message_for_agent"] = "An error occurred while fetching category dishes."
+#             output_payload["error_details"] = str(e)
 
-    response = {
-        "type": "FunctionCallResponse",
-        "id": function_call_id,
-        "name": function_name,
-        "content": output_payload.get("message_for_agent", "An error occurred while listing dishes.")
-    }
-    await deepgram_service.send_json(response)
-    logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}): {response['content']}")
+#     response = {
+#         "type": "FunctionCallResponse",
+#         "id": function_call_id,
+#         "name": function_name,
+#         "content": output_payload.get("message_for_agent", "An error occurred while listing dishes.")
+#     }
+#     await deepgram_service.send_json(response)
+#     logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}): {response['content']}")
 
 
-async def handle_recommend_dishes_english(
-    function_call_id: str,
-    function_name: str, # Added function_name
-    input_data: Dict[str, Any],
-    deepgram_service,
-    portal_id: str,
-    call_sid: Optional[str]
-):
-    """Handles the recommend_dishes_english function call."""
-    count = input_data.get("count", 3)
-    category_name_en = input_data.get("category_name_en") # Optional
+# async def handle_recommend_dishes_english(
+#     function_call_id: str,
+#     function_name: str, # Added function_name
+#     input_data: Dict[str, Any],
+#     deepgram_service,
+#     portal_id: str,
+#     call_sid: Optional[str]
+# ):
+#     """Handles the recommend_dishes_english function call."""
+#     count = input_data.get("count", 3)
+#     category_name_en = input_data.get("category_name_en") # Optional
     
-    logger.info(f"Handling {function_name} for count={count}, category='{category_name_en}' in portal {portal_id} (CallSid: {call_sid})")
+#     logger.info(f"Handling {function_name} for count={count}, category='{category_name_en}' in portal {portal_id} (CallSid: {call_sid})")
 
-    output_payload = {
-        "recommended_dishes": [],
-        "message_for_agent": "Sorry, I couldn't find any dishes to recommend at the moment."
-    }
-    if category_name_en:
-        output_payload["category_queried_en"] = category_name_en
+#     output_payload = {
+#         "recommended_dishes": [],
+#         "message_for_agent": "Sorry, I couldn't find any dishes to recommend at the moment."
+#     }
+#     if category_name_en:
+#         output_payload["category_queried_en"] = category_name_en
 
-    try:
-        menu_response = await get_extracted_dishes(portal_id)
-        if menu_response and menu_response.get("success"):
-            all_dishes_from_pos = menu_response.get("data", [])
+#     try:
+#         menu_response = await get_extracted_dishes(portal_id)
+#         if menu_response and menu_response.get("success"):
+#             all_dishes_from_pos = menu_response.get("data", [])
             
-            candidate_dishes_for_recommendation = all_dishes_from_pos
-            if category_name_en:
-                candidate_dishes_for_recommendation = [
-                    dish for dish in all_dishes_from_pos
-                    if dish.get("category_name_en", "").lower() == category_name_en.lower()
-                ]
-                if not candidate_dishes_for_recommendation:
-                    output_payload["message_for_agent"] = f"Sorry, I couldn't find any dishes in the '{category_name_en}' category to recommend."
+#             candidate_dishes_for_recommendation = all_dishes_from_pos
+#             if category_name_en:
+#                 candidate_dishes_for_recommendation = [
+#                     dish for dish in all_dishes_from_pos
+#                     if dish.get("category_name_en", "").lower() == category_name_en.lower()
+#                 ]
+#                 if not candidate_dishes_for_recommendation:
+#                     output_payload["message_for_agent"] = f"Sorry, I couldn't find any dishes in the '{category_name_en}' category to recommend."
             
-            # Further filter candidates for valid English names
-            valid_candidate_dishes = []
-            if candidate_dishes_for_recommendation:
-                for dish_detail in candidate_dishes_for_recommendation:
-                    name_to_check = dish_detail.get("dish_name_en")
-                    if name_to_check and is_primarily_english(name_to_check):
-                        valid_candidate_dishes.append(dish_detail)
+#             # Further filter candidates for valid English names
+#             valid_candidate_dishes = []
+#             if candidate_dishes_for_recommendation:
+#                 for dish_detail in candidate_dishes_for_recommendation:
+#                     name_to_check = dish_detail.get("dish_name_en")
+#                     if name_to_check and is_primarily_english(name_to_check):
+#                         valid_candidate_dishes.append(dish_detail)
             
-            if valid_candidate_dishes:
-                num_to_recommend = min(count, len(valid_candidate_dishes))
-                num_to_recommend = max(0, num_to_recommend) # Ensure not negative
+#             if valid_candidate_dishes:
+#                 num_to_recommend = min(count, len(valid_candidate_dishes))
+#                 num_to_recommend = max(0, num_to_recommend) # Ensure not negative
                 
-                recommended_dishes_details = []
-                if num_to_recommend > 0:
-                    recommended_dishes_details = random.sample(valid_candidate_dishes, num_to_recommend)
+#                 recommended_dishes_details = []
+#                 if num_to_recommend > 0:
+#                     recommended_dishes_details = random.sample(valid_candidate_dishes, num_to_recommend)
                 
-                dishes_to_return = []
-                valid_recommended_dish_names = []
-                for dish_detail in recommended_dishes_details:
-                    # Already pre-filtered for valid English names
-                    name_en = dish_detail.get("dish_name_en")
-                    dishes_to_return.append({
-                        "name_en": name_en,
-                        "price": dish_detail.get("price")
-                    })
-                    valid_recommended_dish_names.append(name_en)
+#                 dishes_to_return = []
+#                 valid_recommended_dish_names = []
+#                 for dish_detail in recommended_dishes_details:
+#                     # Already pre-filtered for valid English names
+#                     name_en = dish_detail.get("dish_name_en")
+#                     dishes_to_return.append({
+#                         "name_en": name_en,
+#                         "price": dish_detail.get("price")
+#                     })
+#                     valid_recommended_dish_names.append(name_en)
                 
-                if dishes_to_return:
-                    output_payload["recommended_dishes"] = dishes_to_return
-                    dish_names_str = ", ".join(valid_recommended_dish_names)
+#                 if dishes_to_return:
+#                     output_payload["recommended_dishes"] = dishes_to_return
+#                     dish_names_str = ", ".join(valid_recommended_dish_names)
                     
-                    if category_name_en:
-                        output_payload["message_for_agent"] = f"From the '{category_name_en}' category, how about: {dish_names_str}?"
-                    else:
-                        output_payload["message_for_agent"] = f"Sure, I can recommend these: {dish_names_str}."
-                elif category_name_en: # Had candidates in category, but none were valid English
-                     output_payload["message_for_agent"] = f"I found items in the '{category_name_en}' category, but none with clear English names to recommend."
-                else: # No category, but all items lacked valid English names or menu was empty
-                     output_payload["message_for_agent"] = "I couldn't find any suitable English named dishes to recommend from the menu."
+#                     if category_name_en:
+#                         output_payload["message_for_agent"] = f"From the '{category_name_en}' category, how about: {dish_names_str}?"
+#                     else:
+#                         output_payload["message_for_agent"] = f"Sure, I can recommend these: {dish_names_str}."
+#                 elif category_name_en: # Had candidates in category, but none were valid English
+#                      output_payload["message_for_agent"] = f"I found items in the '{category_name_en}' category, but none with clear English names to recommend."
+#                 else: # No category, but all items lacked valid English names or menu was empty
+#                      output_payload["message_for_agent"] = "I couldn't find any suitable English named dishes to recommend from the menu."
 
-                logger.info(f"Recommended {len(dishes_to_return)} valid English dishes. Category: '{category_name_en}'. Portal: {portal_id}.")
+#                 logger.info(f"Recommended {len(dishes_to_return)} valid English dishes. Category: '{category_name_en}'. Portal: {portal_id}.")
 
-            elif not category_name_en and not all_dishes_from_pos: 
-                 output_payload["message_for_agent"] = "The menu seems to be empty right now, so I can't make any recommendations."
-            # If category_name_en was specified but no candidate_dishes, or no valid English ones, message is already set.
+#             elif not category_name_en and not all_dishes_from_pos: 
+#                  output_payload["message_for_agent"] = "The menu seems to be empty right now, so I can't make any recommendations."
+#             # If category_name_en was specified but no candidate_dishes, or no valid English ones, message is already set.
 
-        else:
-            error_msg = menu_response.get('message', 'Unknown error') if menu_response else "No response"
-            logger.error(f"Failed to get extracted dishes for portal {portal_id} for recommendation: {error_msg}")
-            output_payload["message_for_agent"] = "There was an error retrieving the menu for recommendations."
-    except Exception as e:
-        logger.error(f"Error processing {function_name}: {e}", exc_info=True)
-        output_payload["message_for_agent"] = "An error occurred while preparing recommendations."
-        output_payload["error_details"] = str(e)
+#         else:
+#             error_msg = menu_response.get('message', 'Unknown error') if menu_response else "No response"
+#             logger.error(f"Failed to get extracted dishes for portal {portal_id} for recommendation: {error_msg}")
+#             output_payload["message_for_agent"] = "There was an error retrieving the menu for recommendations."
+#     except Exception as e:
+#         logger.error(f"Error processing {function_name}: {e}", exc_info=True)
+#         output_payload["message_for_agent"] = "An error occurred while preparing recommendations."
+#         output_payload["error_details"] = str(e)
 
-    response = {
-        "type": "FunctionCallResponse",
-        "id": function_call_id,
-        "name": function_name,
-        "content": output_payload.get("message_for_agent", "An error occurred while recommending dishes.")
-    }
-    await deepgram_service.send_json(response)
-    logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}): {response['content']}")
+#     response = {
+#         "type": "FunctionCallResponse",
+#         "id": function_call_id,
+#         "name": function_name,
+#         "content": output_payload.get("message_for_agent", "An error occurred while recommending dishes.")
+#     }
+#     await deepgram_service.send_json(response)
+#     logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}): {response['content']}")
 
 
-async def handle_get_random_menu_categories_english(
-    function_call_id: str,
-    function_name: str,
-    deepgram_service,
-    portal_id: str,
-    call_sid: Optional[str]
-):
-    """Handles the get_random_menu_categories_english function call."""
-    logger.info(f"Handling {function_name} in portal {portal_id} (CallSid: {call_sid})")
+# async def handle_get_random_menu_categories_english(
+#     function_call_id: str,
+#     function_name: str,
+#     deepgram_service,
+#     portal_id: str,
+#     call_sid: Optional[str]
+# ):
+#     """Handles the get_random_menu_categories_english function call."""
+#     logger.info(f"Handling {function_name} in portal {portal_id} (CallSid: {call_sid})")
 
-    output_payload = {
-        "categories": [],
-        "message_for_agent": "Sorry, I couldn't retrieve any menu categories at the moment."
-    }
+#     output_payload = {
+#         "categories": [],
+#         "message_for_agent": "Sorry, I couldn't retrieve any menu categories at the moment."
+#     }
 
-    try:
-        menu_response = await get_extracted_dishes(portal_id)
-        if menu_response and menu_response.get("success"):
-            all_dishes = menu_response.get("data", [])
+#     try:
+#         menu_response = await get_extracted_dishes(portal_id)
+#         if menu_response and menu_response.get("success"):
+#             all_dishes = menu_response.get("data", [])
             
-            # Get unique, valid English category names
-            english_categories = sorted(list(set(
-                dish.get("category_name_en") 
-                for dish in all_dishes 
-                if dish.get("category_name_en") and is_primarily_english(dish.get("category_name_en"))
-            )))
+#             # Get unique, valid English category names
+#             english_categories = sorted(list(set(
+#                 dish.get("category_name_en") 
+#                 for dish in all_dishes 
+#                 if dish.get("category_name_en") and is_primarily_english(dish.get("category_name_en"))
+#             )))
             
-            if english_categories:
-                num_to_select = min(3, len(english_categories))
-                selected_categories = random.sample(english_categories, num_to_select)
+#             if english_categories:
+#                 num_to_select = min(3, len(english_categories))
+#                 selected_categories = random.sample(english_categories, num_to_select)
                 
-                output_payload["categories"] = selected_categories
-                categories_str = ", ".join(selected_categories)
-                output_payload["message_for_agent"] = f"We have several categories, including: {categories_str}. Which one would you like to hear about?"
-                logger.info(f"Found and selected {num_to_select} random English categories for portal {portal_id}.")
-            else:
-                logger.info(f"No valid English categories found for portal {portal_id}.")
-                output_payload["message_for_agent"] = "I couldn't find any English menu categories to suggest."
-        else:
-            error_msg = menu_response.get('message', 'Unknown error') if menu_response else "No response"
-            logger.error(f"Failed to get extracted dishes for portal {portal_id} for categories: {error_msg}")
-            output_payload["message_for_agent"] = "There was an error retrieving the menu categories."
-    except Exception as e:
-        logger.error(f"Error processing {function_name}: {e}", exc_info=True)
-        output_payload["message_for_agent"] = "An error occurred while fetching menu categories."
-        output_payload["error_details"] = str(e)
+#                 output_payload["categories"] = selected_categories
+#                 categories_str = ", ".join(selected_categories)
+#                 output_payload["message_for_agent"] = f"We have several categories, including: {categories_str}. Which one would you like to hear about?"
+#                 logger.info(f"Found and selected {num_to_select} random English categories for portal {portal_id}.")
+#             else:
+#                 logger.info(f"No valid English categories found for portal {portal_id}.")
+#                 output_payload["message_for_agent"] = "I couldn't find any English menu categories to suggest."
+#         else:
+#             error_msg = menu_response.get('message', 'Unknown error') if menu_response else "No response"
+#             logger.error(f"Failed to get extracted dishes for portal {portal_id} for categories: {error_msg}")
+#             output_payload["message_for_agent"] = "There was an error retrieving the menu categories."
+#     except Exception as e:
+#         logger.error(f"Error processing {function_name}: {e}", exc_info=True)
+#         output_payload["message_for_agent"] = "An error occurred while fetching menu categories."
+#         output_payload["error_details"] = str(e)
 
-    response = {
-        "type": "FunctionCallResponse",
-        "id": function_call_id,
-        "name": function_name,
-        "content": output_payload.get("message_for_agent", "An error occurred while getting categories.")
-    }
-    await deepgram_service.send_json(response)
-    logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}): {response['content']}")
+#     response = {
+#         "type": "FunctionCallResponse",
+#         "id": function_call_id,
+#         "name": function_name,
+#         "content": output_payload.get("message_for_agent", "An error occurred while getting categories.")
+#     }
+#     await deepgram_service.send_json(response)
+#     logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}): {response['content']}")
 
 
 async def handle_send_menu_link(
@@ -838,11 +838,30 @@ async def handle_order_summary_thirty_nine_miles_en(
     client_id: Optional[str] 
 ):
     """Handles the order_summary function call for Thirty Nine Miles (English)."""
+    # --- DUPLICATE ORDER PREVENTION ---
+    if await has_order_been_placed(call_sid):
+        logger.warning(f"Rejected duplicate 'order_summary' call for {call_sid} because an order has already been successfully placed.")
+        response = {
+            "type": "FunctionCallResponse",
+            "id": function_call_id,
+            "name": function_name,
+            "content": json.dumps({
+                "status": "REJECTED",
+                "message_for_agent": "The order has already been confirmed and placed. The call should now be ending."
+            })
+        }
+        await deepgram_service.send_json(response)
+        return
+
     # Defensive logging to track every invocation of this critical function.
     logger.info(f"--- ATTEMPTING TO PLACE ORDER --- Function: {function_name}, CallSid: {call_sid}, FunctionCallID: {function_call_id}")
     logger.info(f"Input data: {json.dumps(input_data)}")
 
     # --- STATE MANAGEMENT GATEKEEPER ---
+    ai_items = input_data.get("items", [])
+    ai_total_price = input_data.get("total_price")
+    summary_status = input_data.get("summary")
+
     if order_manager.is_active(call_sid):
         logger.warning(f"Rejected 'order_summary' call for call_sid: {call_sid} because an item configuration is active.")
         response = {
@@ -938,8 +957,44 @@ async def handle_order_summary_thirty_nine_miles_en(
                 if not option_groups:
                     continue
 
+                # --- START: FAMILY COMBO CUSTOM VALIDATION ---
+                if "family combo" in item_name.lower():
+                    item_options = item.get("options", {})
+                    
+                    # 1. Check for crab selection
+                    if not item_options.get("crab"):
+                        error_msg = "Order rejected. The Family Combo is missing a crab selection. You must ask the user for their choice."
+                        logger.error(f"Validation failed for call {call_sid}: {error_msg}")
+                        response_content_payload = {"status": "REJECTED", "order_placed": False, "message_for_agent": error_msg}
+                        final_response_to_deepgram = {"type": "FunctionCallResponse", "id": function_call_id, "name": function_name, "content": json.dumps(response_content_payload)}
+                        await deepgram_service.send_json(final_response_to_deepgram)
+                        return
+
+                    # 2. Check for the correct number of proteins (3)
+                    proteins = item_options.get("proteins", [])
+                    if len(proteins) != 3:
+                        error_msg = f"Order rejected. The Family Combo requires 3 protein selections, but {len(proteins)} were found. You must ask the user to clarify."
+                        logger.error(f"Validation failed for call {call_sid}: {error_msg}")
+                        response_content_payload = {"status": "REJECTED", "order_placed": False, "message_for_agent": error_msg}
+                        final_response_to_deepgram = {"type": "FunctionCallResponse", "id": function_call_id, "name": function_name, "content": json.dumps(response_content_payload)}
+                        await deepgram_service.send_json(final_response_to_deepgram)
+                        return
+
+                    # 3. Check for the correct number of free items (5)
+                    free_items = item_options.get("free_items", [])
+                    if len(free_items) != 5:
+                        error_msg = f"Order rejected. The Family Combo requires 5 free item selections, but {len(free_items)} were found. You must ask the user to clarify."
+                        logger.error(f"Validation failed for call {call_sid}: {error_msg}")
+                        response_content_payload = {"status": "REJECTED", "order_placed": False, "message_for_agent": error_msg}
+                        final_response_to_deepgram = {"type": "FunctionCallResponse", "id": function_call_id, "name": function_name, "content": json.dumps(response_content_payload)}
+                        await deepgram_service.send_json(final_response_to_deepgram)
+                        return
+                    
+                    # If all custom checks pass, skip the generic loop for this item
+                    continue 
+                # --- END: FAMILY COMBO CUSTOM VALIDATION ---
+
                 for group in option_groups:
-                    # Skip validation for Customized Combo as it has its own logic
                     if "customized combo" in item_name.lower():
                         continue
 
@@ -951,7 +1006,6 @@ async def handle_order_summary_thirty_nine_miles_en(
                         has_selection_for_group = False
                         
                         # --- START: ROBUST VALIDATION LOGIC ---
-                        # Special check for fixed-price combo protein selections
                         is_protein_group = _is_protein_group(group_name_en) and "free" not in group_name_en.lower()
                         if "combo #" in item_name.lower() and is_protein_group:
                             if item_options.get("fixed_combo_selections"):
@@ -1042,83 +1096,157 @@ async def handle_order_summary_thirty_nine_miles_en(
                     reconstructed_option_groups = []
                     item_price = float(pos_dish_details.get("price", 0.0))
 
-                    protein_option_groups_from_menu = []
-                    for g in pos_dish_details.get("optionGroups", []):
-                        name = g.get("name", {})
-                        if not name:
-                            continue
+                    # --- START: FAMILY COMBO PAYLOAD MAPPING ---
+                    if "family combo" in item_name_en.lower():
+                        logger.info(f"Applying direct mapping for Family Combo payload based on menu structure.")
                         
-                        en_name = name.get("en")
-                        zh_name = name.get("zh")
+                        ai_options = ai_item.get("options", {})
+                        all_option_groups = pos_dish_details.get("optionGroups", [])
                         
-                        # Check English name first
-                        if isinstance(en_name, str) and "choose one" in en_name.lower():
-                            protein_option_groups_from_menu.append(g)
-                            continue
-                            
-                        # If not in English, check Chinese name
-                        if isinstance(zh_name, str) and "choose one" in zh_name.lower():
-                            protein_option_groups_from_menu.append(g)
+                        # Create a flat list of all possible options from the menu for easier searching.
+                        flat_menu_options = []
+                        for group in all_option_groups:
+                            for option in group.get("options", []):
+                                flat_menu_options.append((option, group))
 
-                    if isinstance(pos_options, dict):
-                        # Handle the special list of protein selections first
-                        if 'fixed_combo_selections' in pos_options:
-                            protein_selections = pos_options.pop('fixed_combo_selections')
-                            
-                            all_possible_protein_options = []
-                            for group in protein_option_groups_from_menu:
-                                all_possible_protein_options.extend(group.get("options", []))
+                        # Find all selected options and their original groups
+                        crab_selection = ai_options.get("crab")
+                        protein_selections = ai_options.get("proteins", [])
+                        free_item_selections = ai_options.get("free_items", [])
 
-                            matched_protein_options = []
-                            for selected_protein in protein_selections:
-                                found_option = next((opt for opt in all_possible_protein_options if _get_english_name(opt.get("name", {})) == selected_protein), None)
-                                if found_option:
-                                    matched_protein_options.append(MenuProductOption(**found_option))
-                                    item_price += found_option.get("adjustPrice", 0.0)
-                                else:
-                                    logger.warning(f"Could not find menu option for fixed combo protein: {selected_protein}")
-                            
-                            if matched_protein_options:
-                                reconstructed_option_groups.append(MenuProductOptionGroup(
-                                    name=TextStore(en="CHOOSE ONE", zh="CHOOSE ONE"),
-                                    options=matched_protein_options
-                                ))
-
-                        # Now, process the rest of the options (flavor, spice, etc.)
-                        for selection_key, selected_values in pos_options.items():
-                            target_group = next((g for g in all_option_groups_from_menu if _get_english_name(g.get("name", {})).strip().lower() == selection_key.strip().lower()), None)
-                            
-                            if not target_group:
-                                logger.warning(f"Could not find any option group named '{selection_key}' for combo '{item_name_en}'.")
-                                continue
-
-                            if not isinstance(selected_values, list):
-                                selected_values = [selected_values]
-
-                            all_possible_options = target_group.get("options", [])
-                            
-                            matched_options_for_group = []
-                            for selected_value in selected_values:
-                                selected_value_name = selected_value if isinstance(selected_value, str) else selected_value.get("name")
-                                if not selected_value_name:
-                                    continue
-
-                                found_option = next((opt for opt in all_possible_options if _get_english_name(opt.get("name", {})) == selected_value_name), None)
+                        # Find the menu details for each selected option
+                        def find_option_in_menu(selection_name):
+                            # Normalize whitespace for robust matching against inconsistent menu data
+                            normalized_selection_name = ' '.join(selection_name.strip().lower().split())
+                            for option_details, group_details in flat_menu_options:
+                                menu_option_name = _get_english_name(option_details.get("name", {}))
+                                normalized_menu_option_name = ' '.join(menu_option_name.strip().lower().split())
                                 
-                                if found_option:
-                                    matched_options_for_group.append(MenuProductOption(**found_option))
-                                    item_price += found_option.get("adjustPrice", 0.0)
-                                else:
-                                    logger.warning(f"Could not find selected option '{selected_value_name}' in the '{selection_key}' group.")
-                            
-                            if matched_options_for_group:
-                                reconstructed_option_groups.append(MenuProductOptionGroup(
-                                    name=TextStore(**target_group.get("name", {})),
-                                    options=matched_options_for_group
-                                ))
+                                if normalized_menu_option_name == normalized_selection_name:
+                                    return option_details, group_details
+                            logger.warning(f"Family Combo: Could not find menu data for selection '{selection_name}'.")
+                            return None, None
 
-                    product_options_for_pos = reconstructed_option_groups
-                    logger.info(f"Reconstructed {len(product_options_for_pos)} option groups for fixed-price combo. Final calculated price: {item_price}")
+                        # Process selections and prepare them for grouping
+                        matched_crab, crab_group_details = find_option_in_menu(crab_selection) if crab_selection else (None, None)
+                        
+                        matched_proteins = []
+                        protein_group_details = [] # Will hold the group info for each matched protein
+                        for p_name in protein_selections:
+                            opt, group = find_option_in_menu(p_name)
+                            if opt and group:
+                                matched_proteins.append(opt)
+                                protein_group_details.append(group)
+
+                        matched_free_items = []
+                        free_item_group_details = [] # Will hold the group info for each matched free item
+                        for f_name in free_item_selections:
+                            opt, group = find_option_in_menu(f_name)
+                            if opt and group:
+                                matched_free_items.append(opt)
+                                free_item_group_details.append(group)
+
+                        # Build the final list of option groups for the payload
+                        # This logic ensures that if 3 proteins were selected, they are put into 3 separate groups in the payload,
+                        # matching the menu's structure of having three "PICK 1 POUND" groups.
+                        
+                        if matched_crab and crab_group_details:
+                            reconstructed_option_groups.append(MenuProductOptionGroup(
+                                name=TextStore(**crab_group_details.get("name", {})),
+                                options=[MenuProductOption(**matched_crab)]
+                            ))
+
+                        # Assign each matched protein to one of the available "PICK 1 POUND" groups
+                        available_protein_groups = [g for g in all_option_groups if "pick 1 pound" in _get_english_name(g.get("name", {})).lower().replace("   ", " ")]
+                        for i, protein_option in enumerate(matched_proteins):
+                            if i < len(available_protein_groups):
+                                group_for_this_protein = available_protein_groups[i]
+                                reconstructed_option_groups.append(MenuProductOptionGroup(
+                                    name=TextStore(**group_for_this_protein.get("name", {})),
+                                    options=[MenuProductOption(**protein_option)]
+                                ))
+                            else:
+                                logger.warning(f"Family Combo: Not enough 'PICK 1 POUND' groups in menu for protein '{protein_option}'.")
+
+                        # Assign each matched free item to one of the available free groups
+                        available_free_groups = [g for g in all_option_groups if "free" in _get_english_name(g.get("name", {})).lower()]
+                        for i, free_item_option in enumerate(matched_free_items):
+                            if i < len(available_free_groups):
+                                group_for_this_item = available_free_groups[i]
+                                reconstructed_option_groups.append(MenuProductOptionGroup(
+                                    name=TextStore(**group_for_this_item.get("name", {})),
+                                    options=[MenuProductOption(**free_item_option)]
+                                ))
+                            else:
+                                logger.warning(f"Family Combo: Not enough 'free' groups in menu for item '{free_item_option.get('name')}'.")
+
+                        # Handle other standard options like flavor and spice
+                        other_options = {k: v for k, v in ai_options.items() if k not in ["crab", "proteins", "free_items"]}
+                        for key, value in other_options.items():
+                            target_group = next((g for g in all_option_groups if _get_english_name(g.get("name", {})).strip().lower() == key.strip().lower()), None)
+                            if target_group:
+                                found_option = next((opt for opt in target_group.get("options", []) if _get_english_name(opt.get("name", {})).strip().lower() == str(value).strip().lower()), None)
+                                if found_option:
+                                    reconstructed_option_groups.append(MenuProductOptionGroup(
+                                        name=TextStore(**target_group.get("name", {})),
+                                        options=[MenuProductOption(**found_option)]
+                                    ))
+                                else:
+                                    logger.warning(f"Family Combo: Could not find menu option for '{value}' in group '{key}'.")
+                            else:
+                                logger.warning(f"Family Combo: Could not find option group '{key}'.")
+                        
+                        product_options_for_pos = reconstructed_option_groups
+                        logger.info(f"Reconstructed {len(product_options_for_pos)} option groups for Family Combo using direct mapping.")
+
+                    else: # The original generic logic for other combos
+                        protein_option_groups_from_menu = []
+                        for g in pos_dish_details.get("optionGroups", []):
+                            name = g.get("name", {})
+                            if not name: continue
+                            en_name, zh_name = name.get("en"), name.get("zh")
+                            if isinstance(en_name, str) and "choose one" in en_name.lower():
+                                protein_option_groups_from_menu.append(g)
+                            elif isinstance(zh_name, str) and "choose one" in zh_name.lower():
+                                protein_option_groups_from_menu.append(g)
+
+                        if isinstance(pos_options, dict):
+                            if 'fixed_combo_selections' in pos_options:
+                                protein_selections = pos_options.pop('fixed_combo_selections')
+                                all_possible_protein_options = [opt for group in protein_option_groups_from_menu for opt in group.get("options", [])]
+                                matched_protein_options = []
+                                for selected_protein in protein_selections:
+                                    found_option = next((opt for opt in all_possible_protein_options if _get_english_name(opt.get("name", {})).strip().lower() == selected_protein.strip().lower()), None)
+                                    if found_option:
+                                        matched_protein_options.append(MenuProductOption(**found_option))
+                                        item_price += found_option.get("adjustPrice", 0.0)
+                                    else:
+                                        logger.warning(f"Could not find menu option for fixed combo protein: {selected_protein}")
+                                if matched_protein_options:
+                                    reconstructed_option_groups.append(MenuProductOptionGroup(name=TextStore(en="CHOOSE ONE", zh="CHOOSE ONE"), options=matched_protein_options))
+
+                            for selection_key, selected_values in pos_options.items():
+                                target_group = next((g for g in all_option_groups_from_menu if _get_english_name(g.get("name", {})).strip().lower() == selection_key.strip().lower()), None)
+                                if not target_group:
+                                    logger.warning(f"Could not find any option group named '{selection_key}' for combo '{item_name_en}'.")
+                                    continue
+                                if not isinstance(selected_values, list): selected_values = [selected_values]
+                                all_possible_options = target_group.get("options", [])
+                                matched_options_for_group = []
+                                for selected_value in selected_values:
+                                    selected_value_name = selected_value if isinstance(selected_value, str) else selected_value.get("name")
+                                    if not selected_value_name: continue
+                                    found_option = next((opt for opt in all_possible_options if _get_english_name(opt.get("name", {})) == selected_value_name), None)
+                                    if found_option:
+                                        matched_options_for_group.append(MenuProductOption(**found_option))
+                                        item_price += found_option.get("adjustPrice", 0.0)
+                                    else:
+                                        logger.warning(f"Could not find selected option '{selected_value_name}' in the '{selection_key}' group.")
+                                if matched_options_for_group:
+                                    reconstructed_option_groups.append(MenuProductOptionGroup(name=TextStore(**target_group.get("name", {})), options=matched_options_for_group))
+                        
+                        product_options_for_pos = reconstructed_option_groups
+                        logger.info(f"Reconstructed {len(product_options_for_pos)} option groups for fixed-price combo. Final calculated price: {item_price}")
 
                 # Case 3: Non-combo item with a dictionary of {group_name: selection}
                 elif isinstance(ai_options, dict) and ai_options:
@@ -1218,29 +1346,46 @@ async def handle_order_summary_thirty_nine_miles_en(
                         
                         options_list = []
                         if isinstance(options, dict):
-                            # Handle fixed combo proteins first
-                            if 'fixed_combo_selections' in options:
-                                options_list.extend([_clean_option_for_tts(opt) for opt in options.get('fixed_combo_selections', [])])
-                            
-                            # Handle all other options
-                            for key, value in options.items():
-                                if key.lower() == 'proteins' and isinstance(value, list):
-                                    # Special handling for customized combo proteins
-                                    protein_details = []
-                                    for protein in value:
-                                        if isinstance(protein, dict):
-                                            name = protein.get('name', '')
-                                            size = protein.get('size', '')
-                                            protein_details.append(f"{size} of {name}")
-                                    if protein_details:
-                                        options_list.append(", ".join(protein_details))
-                                elif key.lower() != 'fixed_combo_selections':
-                                    # General handling for other options (flavor, spice, etc.)
-                                    if isinstance(value, str):
-                                        options_list.append(_clean_option_for_tts(value))
-                                    elif value is not None:
-                                        # Fallback for unexpected types, prevents crash
-                                        options_list.append(str(value))
+                            item_name_lower = item.get("name", "").lower()
+                            # --- START: FAMILY COMBO TTS FIX ---
+                            if "family combo" in item_name_lower:
+                                if options.get("crab"):
+                                    options_list.append(f"crab: {_clean_option_for_tts(options.get('crab'))}")
+                                
+                                protein_list = options.get("proteins", [])
+                                if protein_list:
+                                    cleaned_proteins = [_clean_option_for_tts(p) for p in protein_list]
+                                    options_list.append(f"proteins: {', '.join(cleaned_proteins)}")
+
+                                # Handle other relevant options like flavor and spice, but exclude free_items for brevity
+                                other_options = {k: v for k, v in options.items() if k not in ["crab", "proteins", "free_items"]}
+                                for key, value in other_options.items():
+                                    options_list.append(f"{key.replace('_', ' ')}: {_clean_option_for_tts(value)}")
+                            # --- END: FAMILY COMBO TTS FIX ---
+                            else:
+                                # Handle fixed combo proteins first
+                                if 'fixed_combo_selections' in options:
+                                    options_list.extend([_clean_option_for_tts(opt) for opt in options.get('fixed_combo_selections', [])])
+                                
+                                # Handle all other options
+                                for key, value in options.items():
+                                    if key.lower() == 'proteins' and isinstance(value, list):
+                                        # Special handling for customized combo proteins
+                                        protein_details = []
+                                        for protein in value:
+                                            if isinstance(protein, dict):
+                                                name = protein.get('name', '')
+                                                size = protein.get('size', '')
+                                                protein_details.append(f"{size} of {name}")
+                                        if protein_details:
+                                            options_list.append(", ".join(protein_details))
+                                    elif key.lower() != 'fixed_combo_selections':
+                                        # General handling for other options (flavor, spice, etc.)
+                                        if isinstance(value, str):
+                                            options_list.append(_clean_option_for_tts(value))
+                                        elif value is not None:
+                                            # Fallback for unexpected types, prevents crash
+                                            options_list.append(str(value))
                         
                         if options_list:
                             summary_parts.append(f"{item_name} with {', '.join(options_list)}")
@@ -1253,6 +1398,9 @@ async def handle_order_summary_thirty_nine_miles_en(
 
                     response_content_payload = {"status": "OK", "order_placed": True, "external_order_id": external_pos_order_id, "internal_order_id": internal_db_id, "message_for_agent": final_confirmation_text_for_tts}
                     
+                    # --- SET ORDER PLACED FLAG ---
+                    await set_order_placed_flag(call_sid)
+                    
                     if deepgram_service:
                         deepgram_service.is_final_confirmation_sent = True
 
@@ -1264,36 +1412,50 @@ async def handle_order_summary_thirty_nine_miles_en(
                             options_desc = []
                             if isinstance(item.get("options"), dict):
                                 selections = item.get("options", {})
-                                
-                                # Handle customized combo proteins
-                                if 'proteins' in selections:
-                                    protein_details_list = []
-                                    for p in selections.get("proteins", []):
-                                        if isinstance(p, dict):
-                                            protein_name = p.get('name')
-                                            protein_size = p.get('size', '1 lb')
-                                            if protein_name:
-                                                protein_details_list.append(f"{protein_size} {protein_name}")
-                                    if protein_details_list:
-                                        options_desc.append(f"Proteins: {', '.join(protein_details_list)}")
-                                
-                                # Handle fixed-price combo selections
-                                if 'fixed_combo_selections' in selections:
-                                    selections_list = selections.get("fixed_combo_selections", [])
-                                    if selections_list:
-                                        options_desc.append(f"Selections: {', '.join(selections_list)}")
+                                item_name_lower = item.get("name", "").lower()
 
-                                # Handle all other options, ensuring not to re-add proteins
-                                for key, value in selections.items():
-                                    if key.lower() not in ["proteins", "fixed_combo_selections"]:
-                                        # Clean up the key for display
+                                # --- START: FAMILY COMBO SMS FIX ---
+                                if "family combo" in item_name_lower:
+                                    protein_list = selections.get("proteins", [])
+                                    if protein_list:
+                                        options_desc.append(f"Proteins: {', '.join(protein_list)}")
+
+                                    # Also include other options like crab, flavor, and spice
+                                    other_options = {k: v for k, v in selections.items() if k.lower() != 'proteins'}
+                                    for key, value in other_options.items():
                                         formatted_key = key.replace("_", " ").title()
                                         if isinstance(value, list):
-                                            # Join list items for a clean string
                                             value_str = ', '.join(map(str, value))
                                             options_desc.append(f"{formatted_key}: {value_str}")
                                         else:
                                             options_desc.append(f"{formatted_key}: {value}")
+                                # --- END: FAMILY COMBO SMS FIX ---
+                                else:
+                                    # Existing logic for other items
+                                    if 'proteins' in selections:
+                                        protein_details_list = []
+                                        for p in selections.get("proteins", []):
+                                            if isinstance(p, dict):
+                                                protein_name = p.get('name')
+                                                protein_size = p.get('size', '1 lb')
+                                                if protein_name:
+                                                    protein_details_list.append(f"{protein_size} {protein_name}")
+                                        if protein_details_list:
+                                            options_desc.append(f"Proteins: {', '.join(protein_details_list)}")
+                                    
+                                    if 'fixed_combo_selections' in selections:
+                                        selections_list = selections.get("fixed_combo_selections", [])
+                                        if selections_list:
+                                            options_desc.append(f"Selections: {', '.join(selections_list)}")
+
+                                    for key, value in selections.items():
+                                        if key.lower() not in ["proteins", "fixed_combo_selections"]:
+                                            formatted_key = key.replace("_", " ").title()
+                                            if isinstance(value, list):
+                                                value_str = ', '.join(map(str, value))
+                                                options_desc.append(f"{formatted_key}: {value_str}")
+                                            else:
+                                                options_desc.append(f"{formatted_key}: {value}")
 
                             elif isinstance(item.get("options"), list):
                                 # Handle simple lists of options for non-combo items
@@ -1349,7 +1511,7 @@ async def handle_order_summary_thirty_nine_miles_en(
 
     # Determine the content of the 'output' field. It should always be a simple string
     # that the agent can use to form its next response.
-    output_content_for_deepgram = response_output_content
+    output_content_for_deepgram = clean_text_for_tts(response_output_content)
 
     final_response_to_deepgram = {
         "type": "FunctionCallResponse",

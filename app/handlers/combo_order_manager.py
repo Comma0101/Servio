@@ -12,6 +12,15 @@ class ComboOrderManager:
         self.completed_combos: Dict[str, Dict[str, Any]] = {}
         # The static menu is no longer loaded here.
 
+    FAMILY_COMBO_PROTEIN_CATEGORIES = {
+        "Shrimp": ["Shrimp head on", "Shimp Headless", "Peeled Tail On"],
+        "Crawfish": ["Frozen Crawfish", "Fresh crawfish"],
+        "Mussels": ["Green mussels", "Black Mussels"],
+        "Lobster": ["Whole Lobster", "1 PC Lobster Tail"],
+        "Clams": ["Clams"],
+        "Scallops": ["Scallops on the shell"]
+    }
+
     def _is_protein_group(self, group_name: str) -> bool:
         """
         Identifies if an option group is for a protein selection in a fixed-price combo.
@@ -77,6 +86,22 @@ class ComboOrderManager:
                 "message_for_agent": "The Customized Combo is a great choice! What protein would you like to add? Popular choices include Shrimp, Mussels, and Crab Legs. You can pick one of those, name another choice, or just say 'send the menu' and I'll text it to you.",
                 "tool_to_use": "handle_combo_item_selection"
             }
+        elif "family combo" in dish_name.lower():
+            self.active_orders[call_sid]["selections"]["proteins"] = []
+            self.active_orders[call_sid]["selections"]["crab"] = None
+            self.active_orders[call_sid]["selections"]["free_items"] = []
+            
+            option_groups = dish_details.get("optionGroups", [])
+            required_protein_count = sum(1 for g in option_groups if self._is_protein_group(self._get_display_name(g.get("name", {}))))
+            self.active_orders[call_sid]["required_protein_count"] = required_protein_count
+
+            self.active_orders[call_sid]["state"] = "AWAITING_PROTEIN_CATEGORY"
+            protein_categories = list(self.FAMILY_COMBO_PROTEIN_CATEGORIES.keys())
+            return {
+                "status": "PROMPT_FOR_PROTEIN_CATEGORY",
+                "message_for_agent": f"For the Family Combo, you get to pick 3 proteins, and 1 crab to choose. Let's start with the first one. You can choose from {', '.join(protein_categories)}. What type of seafood would you like?",
+                "tool_to_use": "handle_combo_item_selection"
+            }
         else:
             self.active_orders[call_sid]["selections"]["fixed_combo_selections"] = []
             # Initialize counters for contextual prompting
@@ -98,7 +123,15 @@ class ComboOrderManager:
         order = self.active_orders[call_sid]
         
         response = {}
-        if order["state"] == "AWAITING_PROTEIN_CHOICE":
+        if order["state"] == "AWAITING_PROTEIN_CATEGORY":
+            response = self._handle_protein_category_selection(user_input, order, call_sid)
+        elif order["state"] == "AWAITING_PROTEIN_OPTION_CHOICE":
+            response = self._handle_protein_option_choice(user_input, order, call_sid)
+        elif order["state"] == "AWAITING_CRAB_CHOICE":
+            response = self._handle_crab_choice(user_input, order, call_sid)
+        elif order["state"] == "AWAITING_FREE_ITEM_CHOICE":
+            response = self._handle_free_item_choice(user_input, order, call_sid)
+        elif order["state"] == "AWAITING_PROTEIN_CHOICE":
             response = self._handle_protein_selection(user_input, order, call_sid)
         elif order["state"] == "AWAITING_PROTEIN_CLARIFICATION":
             response = self._handle_protein_clarification(user_input, order, call_sid)
@@ -120,7 +153,7 @@ class ComboOrderManager:
             response = {"status": "ERROR", "message_for_agent": "Invalid order state."}
 
         # Ensure all responses from this manager recommend the correct tool, unless the combo is finished.
-        if order["state"] != "AWAITING_MORE_ITEMS_PROMPT":
+        if order["state"] not in ["AWAITING_MORE_ITEMS_PROMPT", "AWAITING_FINAL_CONFIRMATION"]:
              response["tool_to_use"] = "handle_combo_item_selection"
         return response
 
@@ -135,8 +168,8 @@ class ComboOrderManager:
         """Removes prefixes like '1 lb.' for cleaner TTS prompts."""
         if not original_name:
             return ""
-        # This regex removes variations of "1 lb" and similar patterns from the start of the string.
-        cleaned = re.sub(r'^\d+(\s?\(pc\))?\.?\s?(lb|ib|in)\.?\s*', '', original_name, flags=re.IGNORECASE).strip()
+        # This regex removes variations of "1 lb", "1.5 Lb.", and leading numbers for cleaner TTS.
+        cleaned = re.sub(r'^\d+(\.\d+)?\s?lb?\.?\s*', '', original_name, flags=re.IGNORECASE).strip()
         return cleaned
 
     def _clean_prompt_text(self, text: str) -> str:
@@ -186,6 +219,206 @@ class ComboOrderManager:
             "tell me the", "list the", "can you read me", "read the"
         ]
         return any(phrase in user_input.lower() for phrase in request_phrases)
+
+    def _handle_protein_category_selection(self, user_input: str, order: Dict[str, Any], call_sid: str) -> Dict[str, Any]:
+        """Handles the user's choice of a protein category for the Family Combo."""
+        protein_categories = list(self.FAMILY_COMBO_PROTEIN_CATEGORIES.keys())
+        best_match, score = process.extractOne(user_input, protein_categories)
+
+        if score < 75:
+            return {
+                "action": "reprompt",
+                "message_for_agent": f"I'm sorry, I didn't catch that. Please choose from {', '.join(protein_categories)}."
+            }
+
+        options_for_category = self.FAMILY_COMBO_PROTEIN_CATEGORIES[best_match]
+        order["state"] = "AWAITING_PROTEIN_OPTION_CHOICE"
+        order["current_protein_category"] = best_match
+        
+        options_text = ", ".join(options_for_category)
+        return {
+            "status": "PROMPT_FOR_PROTEIN_OPTION",
+            "message_for_agent": f"For {best_match}, we have: {options_text}. Which one would you like?"
+        }
+
+    def _handle_protein_option_choice(self, user_input: str, order: Dict[str, Any], call_sid: str) -> Dict[str, Any]:
+        """Handles the user's choice of a specific protein from a category for the Family Combo."""
+        category = order.get("current_protein_category")
+        if not category:
+            return {"status": "ERROR", "message_for_agent": "Something went wrong, let's try that again."}
+
+        # Get the "clean" options for fuzzy matching against user input
+        options_for_category = self.FAMILY_COMBO_PROTEIN_CATEGORIES.get(category, [])
+        best_match_clean, score = process.extractOne(user_input, options_for_category)
+
+        if score < 75:
+            return {
+                "action": "reprompt",
+                "message_for_agent": f"I'm sorry, I didn't catch that. For {category}, please choose from {', '.join(options_for_category)}."
+            }
+
+        # Now, find the corresponding "original" name from the live menu data
+        protein_groups = [g for g in order["dish_details"].get("optionGroups", []) if self._is_protein_group(self._get_display_name(g.get("name", {})))]
+        all_protein_options_full = []
+        for group in protein_groups:
+            all_protein_options_full.extend([self._get_display_name(opt.get("name", {})) for opt in group.get("options", [])])
+
+        # Find the best match in the full list that contains the clean name
+        best_match_full = None
+        highest_score = 0
+        for option_full in all_protein_options_full:
+            # We check if the clean name is a substring of the full name.
+            # This is more robust than direct equality.
+            if best_match_clean.lower() in option_full.lower():
+                # Use fuzzy matching to find the best fit among potential candidates
+                current_score = process.extractOne(best_match_clean, [option_full])[1]
+                if current_score > highest_score:
+                    highest_score = current_score
+                    best_match_full = option_full
+        
+        if not best_match_full:
+            logger.warning(f"Could not map clean protein '{best_match_clean}' to a full option name for call {call_sid}.")
+            # Fallback to the clean name if no match is found, though this is unlikely.
+            best_match_full = best_match_clean
+
+
+        order["selections"]["proteins"].append(best_match_full)
+        
+        num_selected_proteins = len(order["selections"]["proteins"])
+        required_proteins = order.get("required_protein_count", 3) # Default to 3 if not found
+
+        if num_selected_proteins < required_proteins:
+            order["state"] = "AWAITING_PROTEIN_CATEGORY"
+            protein_categories = list(self.FAMILY_COMBO_PROTEIN_CATEGORIES.keys())
+            return {
+                "status": "PROMPT_FOR_PROTEIN_CATEGORY",
+                "message_for_agent": f"Great, I've added {best_match_clean}. You still have {required_proteins - num_selected_proteins} protein choices left. What would you like for your next one? You can choose from {', '.join(protein_categories)}.",
+                "tool_to_use": "handle_combo_item_selection"
+            }
+        else:
+            # All proteins selected, move to the crab selection step.
+            order["state"] = "AWAITING_CRAB_CHOICE"
+            
+            # Find the crab group to create the prompt
+            crab_group = next((g for g in order["dish_details"].get("optionGroups", []) if "crab" in self._get_display_name(g.get("name", {})).lower()), None)
+            
+            if not crab_group:
+                # Fallback if crab group isn't found, though it should be.
+                logger.error(f"Could not find 'CHOOSE YOUR CRAB' group for Family Combo in call {call_sid}")
+                order["state"] = "AWAITING_OPTION_CHOICE"
+                return self.get_next_question(call_sid)
+
+            options = [self._clean_option_name_for_tts(self._get_display_name(opt.get("name", {}))) for opt in crab_group.get("options", [])]
+            options_str = ", ".join(opt for opt in options if opt)
+            
+            return {
+                "status": "PROMPT_FOR_CRAB_CHOICE",
+                "message_for_agent": f"Great, you've selected all your proteins. Now, please choose your crab. Your options are: {options_str}."
+            }
+
+    def _handle_crab_choice(self, user_input: str, order: Dict[str, Any], call_sid: str) -> Dict[str, Any]:
+        """Handles the user's choice for the 'CHOOSE YOUR CRAB' option."""
+        crab_group = next((g for g in order["dish_details"].get("optionGroups", []) if "crab" in self._get_display_name(g.get("name", {})).lower()), None)
+        if not crab_group:
+            logger.error(f"Logic error: Reached _handle_crab_choice but couldn't find crab group for call {call_sid}")
+            order["state"] = "AWAITING_OPTION_CHOICE"
+            return self.get_next_question(call_sid)
+
+        options = [self._get_display_name(opt.get("name", {})) for opt in crab_group.get("options", [])]
+        valid_options = [opt for opt in options if opt]
+        
+        best_match, score = process.extractOne(user_input, valid_options)
+
+        if score < 75:
+            options_str = ", ".join(valid_options)
+            return {
+                "action": "reprompt",
+                "message_for_agent": f"I'm sorry, I didn't catch that. For the crab, please choose from: {options_str}."
+            }
+        
+        # Store the crab choice separately for clarity, as it's a distinct choice.
+        order["selections"]["crab"] = best_match
+        
+        # Now that crab is selected, move on to the free item selection.
+        order["state"] = "AWAITING_FREE_ITEM_CHOICE"
+        
+        # Dynamically count free items and create the prompt.
+        option_groups = order["dish_details"].get("optionGroups", [])
+        free_item_groups = [g for g in option_groups if self._is_free_item_group(self._get_display_name(g.get("name", {})))]
+        num_free_items = len(free_item_groups)
+        order["required_free_items"] = num_free_items
+        order["selected_free_items_count"] = 0
+
+        if num_free_items > 0 and free_item_groups:
+            options = [self._clean_option_name_for_tts(self._get_display_name(opt.get("name", {}))) for opt in free_item_groups[0].get("options", [])]
+            options_str = ", ".join(opt for opt in options if opt)
+            message = f"You also get {num_free_items} free items. For your first one, would you like {options_str}?"
+            return {
+                "status": "PROMPT_FOR_FREE_ITEM",
+                "message_for_agent": message
+            }
+        else:
+            # If no free items, skip to the next step.
+            return self.get_next_question(call_sid)
+    def _handle_free_item_choice(self, user_input: str, order: Dict[str, Any], call_sid: str) -> Dict[str, Any]:
+        """Handles the user's choice for a free item."""
+        option_groups = order["dish_details"].get("optionGroups", [])
+        free_item_group = next((g for g in option_groups if self._is_free_item_group(self._get_display_name(g.get("name", {})))), None)
+
+        if not free_item_group:
+            logger.error(f"Logic error: Could not find free item group for call {call_sid}")
+            order["state"] = "AWAITING_OPTION_CHOICE"
+            return self.get_next_question(call_sid)
+
+        options = [self._get_display_name(opt.get("name", {})) for opt in free_item_group.get("options", [])]
+        valid_options = [opt for opt in options if opt]
+        
+        best_match, score = process.extractOne(user_input, valid_options)
+
+        if score < 75:
+            options_str = ", ".join(valid_options)
+            return {
+                "action": "reprompt",
+                "message_for_agent": f"I'm sorry, I didn't catch that. For the free item, please choose from: {options_str}."
+            }
+
+        order["selections"]["free_items"].append(best_match)
+        order["selected_free_items_count"] += 1
+
+        if order["selected_free_items_count"] < order.get("required_free_items", 0):
+            options_str = ", ".join(valid_options)
+            return {
+                "status": "PROMPT_FOR_FREE_ITEM",
+                "message_for_agent": f"I've added the {best_match}. You have {order['required_free_items'] - order['selected_free_items_count']} free items left. What would you like for your next one? Your options are {options_str}."
+            }
+        else:
+            # All free items selected. Find the next non-protein, non-free item step.
+            option_groups = order["dish_details"].get("optionGroups", [])
+            
+            # Find the index of the last free item group to start searching from there.
+            last_free_item_group_index = -1
+            for i, group in enumerate(option_groups):
+                group_name = self._get_display_name(group.get("name", {}))
+                if self._is_free_item_group(group_name):
+                    last_free_item_group_index = i
+
+            first_other_option_index = -1
+            if last_free_item_group_index != -1:
+                for i in range(last_free_item_group_index + 1, len(option_groups)):
+                    group = option_groups[i]
+                    group_name = self._get_display_name(group.get("name", {}))
+                    if not self._is_protein_group(group_name) and not self._is_free_item_group(group_name):
+                        first_other_option_index = i
+                        break
+            
+            if first_other_option_index != -1:
+                order["current_step"] = first_other_option_index
+            else:
+                # If no other options are found, the combo is complete.
+                order["current_step"] = len(option_groups)
+
+            order["state"] = "AWAITING_OPTION_CHOICE"
+            return self.get_next_question(call_sid)
 
     def _handle_protein_selection(self, user_input: str, order: Dict[str, Any], call_sid: str) -> Dict[str, Any]:
         if self.user_requests_options(user_input):
@@ -370,33 +603,57 @@ class ComboOrderManager:
         current_group = option_groups[current_group_index]
         group_name = self._get_display_name(current_group.get("name", {}))
         
-        # If the group is optional, the user might say "no" or "skip"
-        if not current_group.get("isRequired", True):
-            if any(word in user_input.lower() for word in ["no", "skip", "none", "don't want"]):
-                # Just move to the next question without making a selection
+        # If the group is optional, check for negative phrases to skip the step.
+        is_optional = not current_group.get("isRequired", True) or "(optional)" in group_name.lower()
+        
+        # A more robust list of phrases to indicate skipping.
+        negative_phrases = [
+            "no", "no thanks", "no thank you", "none", "nothing", 
+            "skip", "don't want any", "i'm good", "that's it", "no extras"
+        ]
+        
+        # Use fuzzy matching to see if the user's input is very close to a negative phrase.
+        if is_optional:
+            # Find the best match from our negative phrases list.
+            best_match, score = process.extractOne(user_input.lower(), negative_phrases)
+            
+            # If the match is strong enough (e.g., 90% similar), skip the step.
+            if score >= 90:
+                logger.info(f"Detected user wants to skip optional item (input: '{user_input}', matched: '{best_match}'). Advancing to next step.")
                 order["current_step"] += 1
                 return self.get_next_question(call_sid)
 
         # Custom logic to handle menu inconsistencies
         cleaned_input = user_input
-        if "sausage" in user_input.lower():
-            cleaned_input = user_input.lower().replace("sausage", "sausges")
 
-        options = [self._get_display_name(opt.get("name", {})) for opt in current_group.get("options", [])]
-        # Filter out None values that might result from _get_display_name
-        valid_options = [opt for opt in options if opt]
+        # Get the raw option names from the menu
+        raw_options = [self._get_display_name(opt.get("name", {})) for opt in current_group.get("options", [])]
         
-        best_match, score = process.extractOne(cleaned_input, valid_options)
+        # Create a list of cleaned names for matching and TTS
+        cleaned_options = [self._clean_option_name_for_tts(opt) for opt in raw_options if opt]
         
-        if score < 80:
-            options_str = ", ".join(options)
+        # Create a mapping from cleaned name back to the original raw name for saving the order
+        cleaned_to_raw_map = {self._clean_option_name_for_tts(raw_opt): raw_opt for raw_opt in raw_options if raw_opt}
+
+        # Perform fuzzy matching against the CLEANED list for better accuracy
+        best_match_cleaned, score = process.extractOne(cleaned_input, cleaned_options)
+        
+        if score < 75:
+            # Use the CLEANED list for a more natural-sounding reprompt
+            options_str = ", ".join(cleaned_options)
             return {
                 "action": "reprompt",
-                "message_for_agent": f"I'm sorry, I didn't understand that. For {group_name}, your options are: {', '.join(valid_options)}. Which would you like?"
+                "message_for_agent": f"My apologies, {cleaned_input} is not an available option. For {group_name}, your choices are: {options_str}. Which would you like?"
             }
         
-        if "customized combo" not in order["dish_name"].lower():
-            # More robust check for protein selections in fixed combos
+        # Find the original, raw option name from the cleaned match to save to the order
+        best_match = cleaned_to_raw_map[best_match_cleaned]
+        
+        # Check if the current order is the "FAMILY COMBO"
+        is_family_combo = "family combo" in order["dish_name"].lower()
+        
+        if not is_family_combo and "customized combo" not in order["dish_name"].lower():
+            # Original logic for other fixed-price combos
             is_protein_selection = "choose one" in group_name.lower() and "free" not in group_name.lower()
             if is_protein_selection:
                 protein_keywords = ["shrimp", "crawfish", "mussels", "clams", "crab", "lobster", "scallop"]
@@ -406,7 +663,19 @@ class ComboOrderManager:
                     order["selections"][group_name] = best_match
             else:
                 order["selections"][group_name] = best_match
+        elif is_family_combo:
+            # Targeted logic for the Family Combo
+            is_protein_group = self._is_protein_group(group_name)
+            is_free_group = self._is_free_item_group(group_name)
+            
+            if is_protein_group or is_free_group:
+                # Always append choices from protein or free groups to the list
+                order["selections"]["fixed_combo_selections"].append(best_match)
+            else:
+                # Handle other selections like flavor and spice normally
+                order["selections"][group_name] = best_match
         else:
+            # Logic for customized combos
             order["selections"][group_name] = best_match
 
         return self.get_next_question(call_sid)
@@ -763,6 +1032,11 @@ class ComboOrderManager:
             
             logger.info(f"Processing group: '{group_display_name}' at step {order['current_step']}")
 
+            # For Family Combo, skip all protein and free item groups as they are handled by the new flow.
+            if "family combo" in dish_name_lower and (self._is_protein_group(group_display_name) or self._is_free_item_group(group_display_name)):
+                order["current_step"] += 1
+                continue
+
             # Skip groups irrelevant to customized combos
             if is_customized_combo and self._is_protein_group(group_display_name):
                 order["current_step"] += 1
@@ -813,6 +1087,11 @@ class ComboOrderManager:
             
             message += f" Your options are: {options_str}."
 
+            # Check if the group is optional to add a helpful hint
+            is_optional = not current_group.get("isRequired", True) or "(optional)" in group_display_name.lower()
+            if is_optional:
+                message += " You can also say 'no extras' to skip."
+
             order["current_step"] += 1
             logger.info(f"Returning prompt: '{message}'")
             return {
@@ -835,13 +1114,31 @@ class ComboOrderManager:
         order = self.active_orders[call_sid]
         
         summary_parts = []
-        if "proteins" in order["selections"] and order["selections"]["proteins"]:
-            protein_summary = ", ".join([f"{p.get('size', '1 lb')} of {p['name']}" for p in order["selections"]["proteins"]])
-            summary_parts.append(f"\n- {protein_summary}")
+        selections = order.get("selections", {})
 
-        for key, value in order["selections"].items():
-            if key != "proteins":
-                # Format the key to be more readable
+        # Handle customized combo proteins first
+        if "proteins" in selections and selections["proteins"] and "family combo" not in order["dish_name"].lower():
+            protein_summary = ", ".join([f"{p.get('size', '1 lb')} of {p['name']}" for p in selections["proteins"]])
+            summary_parts.append(f"\n- Proteins: {protein_summary}")
+
+        # --- START: FAMILY COMBO SUMMARY LOGIC ---
+        if "family combo" in order["dish_name"].lower():
+            if "proteins" in selections and selections["proteins"]:
+                summary_parts.append(f"\n- Proteins: {', '.join(selections['proteins'])}")
+            if "crab" in selections and selections["crab"]:
+                summary_parts.append(f"\n- Crab: {selections['crab']}")
+            if "free_items" in selections and selections["free_items"]:
+                summary_parts.append(f"\n- Free Items: {', '.join(selections['free_items'])}")
+        # --- END: FAMILY COMBO SUMMARY LOGIC ---
+        else:
+            # Handle fixed combo selections for other combos
+            if "fixed_combo_selections" in selections and selections["fixed_combo_selections"]:
+                fixed_summary = ", ".join(selections["fixed_combo_selections"])
+                summary_parts.append(f"\n- Selections: {fixed_summary}")
+
+        # Handle all other selections (flavor, spice, etc.) for all combo types
+        for key, value in selections.items():
+            if key not in ["proteins", "crab", "free_items", "fixed_combo_selections"]:
                 formatted_key = key.replace("_", " ").title()
                 summary_parts.append(f"\n- {formatted_key}: {value}")
                 

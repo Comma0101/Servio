@@ -23,7 +23,8 @@ async def register_call(call_sid: str, stream_sid: str, caller_phone: Optional[s
         "status": "active",
         "pending_tts": set(),
         "completed_tts": set(),
-        "next_tool_to_use": None  # For stateful tool enforcement
+        "next_tool_to_use": None,  # For stateful tool enforcement
+        "order_placed_successfully": False # To prevent duplicate order submissions
     }
     logger.info(f"Registered call {call_sid} with stream {stream_sid}")
     return True
@@ -210,3 +211,18 @@ async def clear_next_tool(call_sid: str):
             logger.info(f"State override: Clearing next tool for call {call_sid}.")
             _call_states[call_sid]["next_tool_to_use"] = None
             _call_states[call_sid]["last_activity"] = time.time()
+
+async def set_order_placed_flag(call_sid: str):
+    """Sets the flag indicating an order has been successfully placed."""
+    if call_sid in _call_states:
+        _call_states[call_sid]["order_placed_successfully"] = True
+        _call_states[call_sid]["last_activity"] = time.time()
+        logger.info(f"State update: Order has been successfully placed for call {call_sid}.")
+    else:
+        logger.warning(f"Attempted to set order placed flag for unknown call_sid: {call_sid}")
+
+async def has_order_been_placed(call_sid: str) -> bool:
+    """Checks if an order has already been successfully placed for the call."""
+    if call_sid in _call_states:
+        return _call_states[call_sid].get("order_placed_successfully", False)
+    return False

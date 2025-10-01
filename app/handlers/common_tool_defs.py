@@ -330,50 +330,50 @@ CHECK_MENU_ITEM_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
     }
 }
 
-LIST_DISHES_BY_CATEGORY_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
-    "name": "list_dishes_by_category_english",
-    "description": "Use this tool **only** when a customer asks for a list of dishes from a **specific, named category** (e.g., 'What appetizers do you have?', 'Tell me about your seafood options.'). Do not use for general menu inquiries.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "category_name_en": {
-                "type": "string",
-                "description": "The English name of the category."
-            }
-        },
-        "required": ["category_name_en"]
-    }
-}
+# LIST_DISHES_BY_CATEGORY_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
+#     "name": "list_dishes_by_category_english",
+#     "description": "Use this tool **only** when a customer asks for a list of dishes from a **specific, named category** (e.g., 'What appetizers do you have?', 'Tell me about your seafood options.'). Do not use for general menu inquiries.",
+#     "parameters": {
+#         "type": "object",
+#         "properties": {
+#             "category_name_en": {
+#                 "type": "string",
+#                 "description": "The English name of the category."
+#             }
+#         },
+#         "required": ["category_name_en"]
+#     }
+# }
 
-RECOMMEND_DISHES_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
-    "name": "recommend_dishes_english",
-    "description": "Use this tool **only** when the customer explicitly asks for a 'recommendation' for a specific category they have already named, or after they have already been presented with menu options. Do **not** use this for initial vague questions like 'what's good?'. For vague inquiries, use `get_random_menu_categories_english` instead.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "count": {
-                "type": "integer",
-                "description": "Number of dishes to recommend (default 3).",
-                "default": 3
-            },
-            "category_name_en": {
-                "type": "string",
-                "description": "The English name of the category to recommend from (optional)."
-            }
-        }
-        # No 'required' field as parameters are optional or have defaults.
-    }
-}
+# RECOMMEND_DISHES_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
+#     "name": "recommend_dishes_english",
+#     "description": "Use this tool **only** when the customer explicitly asks for a 'recommendation' for a specific category they have already named, or after they have already been presented with menu options. Do **not** use this for initial vague questions like 'what's good?'. For vague inquiries, use `get_random_menu_categories_english` instead.",
+#     "parameters": {
+#         "type": "object",
+#         "properties": {
+#             "count": {
+#                 "type": "integer",
+#                 "description": "Number of dishes to recommend (default 3).",
+#                 "default": 3
+#             },
+#             "category_name_en": {
+#                 "type": "string",
+#                 "description": "The English name of the category to recommend from (optional)."
+#             }
+#         }
+#         # No 'required' field as parameters are optional or have defaults.
+#     }
+# }
 
-GET_RANDOM_MENU_CATEGORIES_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
-    "name": "get_random_menu_categories_english",
-    "description": "Use this tool **only** for vague or general inquiries like 'what’s on the menu?', 'what do you have?', or 'what’s good?'. It provides the customer with a starting point by suggesting a few random menu categories. This is the **first action** for any non-specific menu question.",
-    "parameters": {
-        "type": "object",
-        "properties": {},
-        "required": [],
-    }
-}
+# GET_RANDOM_MENU_CATEGORIES_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
+#     "name": "get_random_menu_categories_english",
+#     "description": "Use this tool **only** for vague or general inquiries like 'what’s on the menu?', 'what do you have?', or 'what’s good?'. It provides the customer with a starting point by suggesting a few random menu categories. This is the **first action** for any non-specific menu question.",
+#     "parameters": {
+#         "type": "object",
+#         "properties": {},
+#         "required": [],
+#     }
+# }
 
 SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
     "name": "send_menu_link",

@@ -74,6 +74,13 @@ class OrderManager:
             logger.error(f"No valid English or Chinese options found for group '{group_name}' in item '{item['item_name']}' for call {call_sid}.")
             return {"status": "ERROR", "message_for_agent": f"I'm sorry, there seems to be an issue with the options for {group_name}."}
 
+        # Handle the "no extras" case for the optional extras group
+        if "pick your extras" in group_name.lower() and "no" in user_input.lower() and "extra" in user_input.lower():
+            logger.info(f"User selected 'no extras' for call {call_sid}.")
+            # Don't store any selection, just advance to the next step
+            item["current_step"] += 1
+            return self.get_next_question(call_sid)
+
         best_match, score = process.extractOne(user_input, options)
 
         if score < 80:
@@ -127,10 +134,15 @@ class OrderManager:
             return {"status": "ERROR", "message_for_agent": f"I'm sorry, there was an issue retrieving the options for {group_name}. Let's try adding that item again later. What else can I get for you?"}
 
         options_str = ", ".join(options)
+        message_for_agent = f"For the {item['item_name']}, what would you like for {group_name}? Your options are: {options_str}."
+
+        # Check if the group is the optional extras group and add the "no extras" option.
+        if "pick your extras" in group_name.lower():
+            message_for_agent += " You can also say 'no extras'."
 
         return {
             "status": "AWAITING_SELECTION",
-            "message_for_agent": f"For the {item['item_name']}, what would you like for {group_name}? Your options are: {options_str}."
+            "message_for_agent": message_for_agent
         }
 
     def add_item_to_cart(self, call_sid: str, item_name: str, quantity: int, options: Dict[str, Any]):

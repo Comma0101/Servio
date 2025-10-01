@@ -28,9 +28,9 @@ from app.handlers.order_manager import order_manager
 from app.handlers.common_tool_defs import (
     ORDER_SUMMARY_TOOL_SCHEMA_EN_OPENAI,
     CHECK_MENU_ITEM_TOOL_SCHEMA_EN_OPENAI,
-    LIST_DISHES_BY_CATEGORY_TOOL_SCHEMA_EN_OPENAI,
-    RECOMMEND_DISHES_TOOL_SCHEMA_EN_OPENAI,
-    GET_RANDOM_MENU_CATEGORIES_TOOL_SCHEMA_EN_OPENAI,
+    # LIST_DISHES_BY_CATEGORY_TOOL_SCHEMA_EN_OPENAI,
+    # RECOMMEND_DISHES_TOOL_SCHEMA_EN_OPENAI,
+    # GET_RANDOM_MENU_CATEGORIES_TOOL_SCHEMA_EN_OPENAI,
     SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI,
     PROCESS_ORDER_SELECTION_TOOL_SCHEMA,
     PROCESS_COMBO_SELECTION_TOOL_SCHEMA
@@ -65,9 +65,9 @@ class DeepgramEnglishAudioHandler():
         self.function_definitions = function_definitions or [
             ORDER_SUMMARY_TOOL_SCHEMA_EN_OPENAI,
             CHECK_MENU_ITEM_TOOL_SCHEMA_EN_OPENAI,
-            LIST_DISHES_BY_CATEGORY_TOOL_SCHEMA_EN_OPENAI,
-            RECOMMEND_DISHES_TOOL_SCHEMA_EN_OPENAI,
-            GET_RANDOM_MENU_CATEGORIES_TOOL_SCHEMA_EN_OPENAI,
+            # LIST_DISHES_BY_CATEGORY_TOOL_SCHEMA_EN_OPENAI,
+            # RECOMMEND_DISHES_TOOL_SCHEMA_EN_OPENAI,
+            # GET_RANDOM_MENU_CATEGORIES_TOOL_SCHEMA_EN_OPENAI,
             SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI,
             PROCESS_ORDER_SELECTION_TOOL_SCHEMA, # This will be renamed in the schema file
             PROCESS_COMBO_SELECTION_TOOL_SCHEMA # This will be renamed in the schema file
@@ -598,12 +598,15 @@ class DeepgramEnglishAudioHandler():
                 }
 
                 try:
-                    # --- COMBO FINALIZATION GATEKEEPER (MOVED FROM english_tool_logic.py) ---
+                    # --- COMBO FINALIZATION GATEKEEPER ---
                     # This logic must run *before* the state override check.
                     if function_name == "order_summary" and combo_order_manager.is_awaiting_final_confirmation(self.call_sid):
-                        logger.info(f"Finalizing pending combo for call {self.call_sid} before dispatching tool.")
+                        logger.info(f"Intercepting premature 'order_summary' call for call SID {self.call_sid} because a combo is awaiting final confirmation.")
                         completed_combo = combo_order_manager.finalize_and_get_combo(self.call_sid)
-                        if completed_combo:
+                        
+                        if not completed_combo:
+                            logger.error(f"Failed to finalize pending combo for call {self.call_sid}. The combo may be lost. Allowing order_summary to proceed with likely validation failure.")
+                        else:
                             order_manager.add_item_to_cart(
                                 self.call_sid,
                                 completed_combo.get("name"),
@@ -611,10 +614,25 @@ class DeepgramEnglishAudioHandler():
                                 completed_combo.get("options", {})
                             )
                             logger.info(f"Successfully finalized and moved combo '{completed_combo.get('name')}' to main cart.")
-                            await clear_next_tool(self.call_sid) # Clear any pending state override after successful finalization
-                        else:
-                            logger.error(f"Failed to finalize pending combo for call {self.call_sid}. The combo may be lost.")
-                    
+                            
+                            # This is the crucial step: stop the premature order placement.
+                            # We send a message back telling the agent the item was added, just like a standard item.
+                            response_payload = {
+                                "status": "ITEM_COMPLETE",
+                                "message_for_agent": f"I've added the {completed_combo.get('name')} to your order. What would you like to do next?",
+                                "current_cart": order_manager.get_cart(self.call_sid)
+                            }
+                            response = {
+                                "type": "FunctionCallResponse",
+                                "id": function_call_id,
+                                "name": "handle_combo_item_selection", # Respond as if it were the correct tool
+                                "content": json.dumps(response_payload)
+                            }
+                            await self.deepgram_service.send_json(response)
+                            await clear_next_tool(self.call_sid)
+                            logger.info(f"Redirected incorrect 'order_summary' call after finalizing combo for call {self.call_sid}.")
+                            return  # Stop execution to prevent placing the order.
+
                     # State override logic
                     next_tool_override = await get_and_clear_next_tool(self.call_sid)
                     if next_tool_override:
