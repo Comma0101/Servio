@@ -589,7 +589,7 @@ class ComboOrderManager:
         order["state"] = "AWAITING_MORE_PROTEINS"
         return {
             "action": "PROMPT_FOR_MORE_PROTEINS",
-            "message_for_agent": f"I've added {size_str} of {last_protein['name']}. Would you like to add another protein?"
+            "message_for_agent": f"I've added {size_str} of {last_protein['name']}. Would you like to add another protein? or you can say 'no' to proceed to the next step."
         }
 
     def _handle_option_selection(self, user_input: str, order: Dict[str, Any], call_sid: str) -> Dict[str, Any]:
@@ -1105,7 +1105,8 @@ class ComboOrderManager:
         return {
             "action": "confirm_order",
             "message_for_agent": f"I have your {order['dish_name']} with {summary}. Is that correct?",
-            "options": order["selections"]
+            "options": order["selections"],
+            "tool_to_use": "handle_combo_item_selection"
         }
 
     def get_order_summary(self, call_sid: str) -> str:

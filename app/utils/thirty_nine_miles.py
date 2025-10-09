@@ -212,7 +212,20 @@ async def _find_dish(portal_id: str, name_to_find: str, language: Literal['en', 
             logger.info(f"Found exact {language} match for '{name_to_find}'.")
             return [dish]
 
-    # 2. If no exact match, fall back to fuzzy matching for combos
+    # 2. If no exact match, fall back to a general fuzzy match for English queries.
+    if language == 'en':
+        all_dish_names = [dish.get(name_key, "") for dish in all_dishes]
+        # Use the original, un-normalized query for fuzzy matching to get the best result.
+        best_match_name, score = process.extractOne(original_query, all_dish_names)
+        
+        # Set a confidence threshold to avoid incorrect matches.
+        if score > 80:
+            best_match_dish = next((dish for dish in all_dishes if dish.get(name_key, "") == best_match_name), None)
+            if best_match_dish:
+                logger.info(f"Found general fuzzy match for '{original_query}' with score {score}. Best match: '{best_match_name}'")
+                return [best_match_dish]
+
+    # 3. If still no match, fall back to fuzzy matching specifically for combos
     if "combo" in search_term_lower and language == 'en':
         combo_dishes = [dish for dish in all_dishes if dish.get("is_combo")]
         if combo_dishes:
@@ -225,7 +238,7 @@ async def _find_dish(portal_id: str, name_to_find: str, language: Literal['en', 
                     logger.info(f"Found combo match for '{original_query}' with score {score}. Best match: '{best_match_name}'")
                     return [best_match_dish]
 
-    # 3. "Contains" match (case-insensitive for English)
+    # 4. "Contains" match (case-insensitive for English)
     contains_matches = [
         dish for dish in all_dishes
         if (language == 'en' and search_term_lower in dish.get(name_key, "").lower()) or \
@@ -233,17 +246,17 @@ async def _find_dish(portal_id: str, name_to_find: str, language: Literal['en', 
     ]
 
     # 4. Search within combo options if no direct matches are found
-    if not contains_matches and language == 'en':
-        for dish in all_dishes:
-            if dish.get("is_combo"):
-                for group in dish.get("dish_details", {}).get("optionGroups", []):
-                    for option in group.get("options", []):
-                        name_info = option.get("name") or {}
-                        option_name = (name_info.get("en") or name_info.get("zh") or "").lower()
-                        if search_term_lower in option_name:
-                            logger.info(f"Found '{name_to_find}' as an option in combo '{dish.get(name_key)}'.")
-                            # Return the parent combo dish
-                            return [dish]
+    # if not contains_matches and language == 'en':
+    #     for dish in all_dishes:
+    #         if dish.get("is_combo"):
+    #             for group in dish.get("dish_details", {}).get("optionGroups", []):
+    #                 for option in group.get("options", []):
+    #                     name_info = option.get("name") or {}
+    #                     option_name = (name_info.get("en") or name_info.get("zh") or "").lower()
+    #                     if search_term_lower in option_name:
+    #                         logger.info(f"Found '{name_to_find}' as an option in combo '{dish.get(name_key)}'.")
+    #                         # Return the parent combo dish
+    #                         return [dish]
 
     if not contains_matches:
         logger.info(f"No {language} match found for '{name_to_find}'.")

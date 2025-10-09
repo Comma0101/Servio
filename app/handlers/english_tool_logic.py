@@ -70,10 +70,48 @@ def clear_cart(call_sid: str):
 FINAL_AUDIO_MARK_NAME = "final_message_played"
 
 def clean_text_for_tts(text: str) -> str:
-    """Removes common formatting characters to make text safe for TTS."""
+    """
+    Cleans text for more natural TTS output by:
+    - Removing formatting characters (asterisks)
+    - Converting 'pc' abbreviations to 'piece' or 'pieces'
+    """
     if not text:
         return ""
-    return text.replace("*", "").strip()
+    
+    # Remove asterisks and other formatting characters
+    text = text.replace("*", "").strip()
+    
+    # Convert pc/pcs to piece/pieces for natural speech
+    # Handles formats like: "12pc", "12 pc", "(12pc)", "12pcs"
+    text = re.sub(
+        r'\(?(\d+)\s*pcs?\)?',
+        lambda m: f"{m.group(1)} piece" if m.group(1) == '1' else f"{m.group(1)} pieces",
+        text,
+        flags=re.IGNORECASE
+    )
+    
+    return text.strip()
+
+def clean_response_for_tts(response_data: Any) -> Any:
+    """
+    Recursively cleans response data to remove formatting characters before sending to TTS.
+    Handles strings, dicts, and lists.
+    """
+    if isinstance(response_data, str):
+        return clean_text_for_tts(response_data)
+    elif isinstance(response_data, dict):
+        cleaned = {}
+        for key, value in response_data.items():
+            # Clean message_for_agent fields specifically
+            if key == "message_for_agent" and isinstance(value, str):
+                cleaned[key] = clean_text_for_tts(value)
+            else:
+                cleaned[key] = clean_response_for_tts(value)
+        return cleaned
+    elif isinstance(response_data, list):
+        return [clean_response_for_tts(item) for item in response_data]
+    else:
+        return response_data
 
 def _get_english_name(name_dict: Dict[str, Any], default: str = "") -> str:
     """
@@ -119,6 +157,30 @@ def is_primarily_english(text: str) -> bool:
     # This regex allows basic Latin alphabet, digits, and common punctuation.
     # It will not match most characters from other languages.
     return bool(re.fullmatch(r"^[a-zA-Z0-9\s!\"#$%&'()*+,-./:;<=>?@[\\\]^_`{|}~]*$", text))
+
+def _format_summary_key(key: str) -> str:
+    """Formats a raw option key for clean TTS output."""
+    key_lower = key.lower()
+    if "flavor" in key_lower:
+        return "Flavor"
+    if "spicy" in key_lower:
+        return "Spice Level"
+    if "choose one" in key_lower or "protein" in key_lower or "meat option" in key_lower:
+        return "Protein"
+    if "free" in key_lower:
+        return "Free Item"
+    if "extras" in key_lower:
+        return "Extras"
+    if "add ons" in key_lower:
+        return "Add-Ons"
+    if "special preference" in key_lower:
+        return "Special Preference"
+    if "fries option" in key_lower:
+        return "Fries Option"
+    if "sauce" in key_lower:
+        return "Sauce"
+    # Fallback for other keys: capitalize and replace underscores
+    return key.replace("_", " ").title()
 
 async def handle_function_call(
     function_request: Dict[str, Any],
@@ -358,16 +420,17 @@ async def handle_check_menu_item_english(
 
                     # If the item has no required options and is not a combo, add it directly to the cart.
                     has_required_options = any(group.get("isRequired") for group in raw_option_groups)
-                    
+                    name_lower = name_en_to_use.lower()
+
                     if not has_required_options:
                         quantity = input_data.get("quantity", 1)
                         order_manager.add_item_to_cart(call_sid, name_en_to_use, quantity, {})
                         output_payload["added_to_cart"] = True
-                        output_payload["message_for_agent"] = f"Okay, I've added {quantity} {name_en_to_use} to your order."
+                        output_payload["tool_to_use"] = None  # Explicitly tell AI no further action needed
+                        output_payload["message_for_agent"] = f"Okay, I've added {quantity} {name_en_to_use} to your order. What else can I get for you?"
                     # --- START OF NEW LOGIC ---
                     # Check if the item is one of the special combos that needs the combo manager
-                    name_lower = name_en_to_use.lower()
-                    if "customized combo" in name_lower or "combo #1" in name_lower or "combo #2" in name_lower or "combo #3" in name_lower or "family combo" in name_lower:
+                    elif "customized combo" in name_lower or "combo #1" in name_lower or "combo #2" in name_lower or "combo #3" in name_lower or "family combo" in name_lower:
                         # Fetch the full menu to pass to the specialized manager
                         live_menu_response = await get_extracted_dishes(portal_id)
                         live_menu_data = live_menu_response.get("data", [])
@@ -450,6 +513,27 @@ async def handle_standard_item_selection(
     user_input = input_data.get("user_input")
     logger.info(f"Handling {function_name} with user_input '{user_input}' for a standard item (CallSid: {call_sid})")
 
+    # Defense-in-depth: Check if there's an active combo that should handle this instead
+    if combo_order_manager.is_active(call_sid):
+        logger.info(f"Redirecting to combo manager - active combo detected for call_sid: {call_sid}")
+        response_payload = combo_order_manager.process_selection(user_input, call_sid)
+        
+        # Ensure the response includes the correct tool recommendation
+        if response_payload.get("status") == "ITEM_COMPLETE":
+            response_payload["current_cart"] = order_manager.get_cart(call_sid)
+        
+        # Clean and send the response
+        cleaned_response_payload = clean_response_for_tts(response_payload)
+        response = {
+            "type": "FunctionCallResponse",
+            "id": function_call_id,
+            "name": function_name,
+            "content": json.dumps(cleaned_response_payload)
+        }
+        await deepgram_service.send_json(response)
+        logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}) - redirected to combo manager")
+        return
+
     if not user_input:
         response_payload = {
             "status": "REPROMPT",
@@ -465,11 +549,14 @@ async def handle_standard_item_selection(
             response_payload["current_cart"] = order_manager.get_cart(call_sid)
         # --- END OF FIX ---
 
+    # Clean the response payload before sending
+    cleaned_response_payload = clean_response_for_tts(response_payload)
+    
     response = {
         "type": "FunctionCallResponse",
         "id": function_call_id,
         "name": function_name,
-        "content": json.dumps(response_payload)
+        "content": json.dumps(cleaned_response_payload)
     }
     await deepgram_service.send_json(response)
     logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}): {response['content']}")
@@ -518,15 +605,20 @@ async def handle_combo_item_selection(
             # Explicitly clear the state override now that the combo flow is complete
             await clear_next_tool(call_sid)
         
-        # If the combo flow is still ongoing, perpetuate the state override
-        elif response_payload.get("tool_to_use"):
-            await set_next_tool(call_sid, response_payload["tool_to_use"])
+        # FIX: Always set the tool for combo flows to ensure state persistence
+        # This prevents the agent from calling the wrong function during final confirmation
+        elif response_payload.get("tool_to_use") or combo_order_manager.is_active(call_sid):
+            await set_next_tool(call_sid, "handle_combo_item_selection")
+            logger.info(f"Set next tool to 'handle_combo_item_selection' for call {call_sid} to maintain combo flow state")
 
+    # Clean the response payload before sending
+    cleaned_response_payload = clean_response_for_tts(response_payload)
+    
     response = {
         "type": "FunctionCallResponse",
         "id": function_call_id,
         "name": function_name,
-        "content": json.dumps(response_payload)
+        "content": json.dumps(cleaned_response_payload)
     }
     await deepgram_service.send_json(response)
     logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}): {response['content']}")
@@ -1360,7 +1452,8 @@ async def handle_order_summary_thirty_nine_miles_en(
                                 # Handle other relevant options like flavor and spice, but exclude free_items for brevity
                                 other_options = {k: v for k, v in options.items() if k not in ["crab", "proteins", "free_items"]}
                                 for key, value in other_options.items():
-                                    options_list.append(f"{key.replace('_', ' ')}: {_clean_option_for_tts(value)}")
+                                    formatted_key = _format_summary_key(key)
+                                    options_list.append(f"{formatted_key}: {_clean_option_for_tts(value)}")
                             # --- END: FAMILY COMBO TTS FIX ---
                             else:
                                 # Handle fixed combo proteins first
@@ -1378,14 +1471,14 @@ async def handle_order_summary_thirty_nine_miles_en(
                                                 size = protein.get('size', '')
                                                 protein_details.append(f"{size} of {name}")
                                         if protein_details:
-                                            options_list.append(", ".join(protein_details))
-                                    elif key.lower() != 'fixed_combo_selections':
+                                            options_list.append(f"Proteins: {', '.join(protein_details)}")
+                                    elif key.lower() not in ['fixed_combo_selections', 'proteins']:
                                         # General handling for other options (flavor, spice, etc.)
+                                        formatted_key = _format_summary_key(key)
                                         if isinstance(value, str):
-                                            options_list.append(_clean_option_for_tts(value))
+                                            options_list.append(f"{formatted_key}: {_clean_option_for_tts(value)}")
                                         elif value is not None:
-                                            # Fallback for unexpected types, prevents crash
-                                            options_list.append(str(value))
+                                            options_list.append(f"{formatted_key}: {str(value)}")
                         
                         if options_list:
                             summary_parts.append(f"{item_name} with {', '.join(options_list)}")

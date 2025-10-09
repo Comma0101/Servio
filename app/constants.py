@@ -185,7 +185,7 @@ CONSTANTS = {
             # "8. 语气友好、礼貌、自然，符合电话口语习惯。"
         # ),
         "INITIAL_ASSISTANT_MESSAGE": "Welcome to KK restaurant, what would you like to order today?",
-        "RESTAURANT_NAME": "KK restaurant",
+        "RESTAURANT_NAME": "crabby crabby",
         "RESTAURANT_NAME_CN": "食为天餐厅",
         # "Welcome to Love Is My Form restaurant. Would you like to place an order for pickup?",
         "INITIAL_USER_MESSAGE": "Hello, If I am ordering, you should tell me if I order something that is not in the menu.  summarize the order",
@@ -199,7 +199,7 @@ CONSTANTS = {
         # "TWILIO_ENHANCED": "true",
         # "TWILIO_CONFIDENCE_THRESHOLD": 0.4,
         "TWILIO_VOICE": "Polly.Joanna-Neural",
-        "MENU_URL": "https://drive.google.com/file/d/16ybWyk8qnB1bT5Mh3TERTt1-RYS6ZN8b/view?usp=sharing",
+        "MENU_URL": "https://docs.google.com/document/d/1ynsABjqMl17F8rjpU4ZS9kUZe-0xbpwn/edit?usp=sharing&ouid=111094670012909876339&rtpof=true&sd=true",
         "MENU": json.dumps(menu),
         "TAX": 0.18,
     },

@@ -317,7 +317,7 @@ ORDER_SUMMARY_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
 
 CHECK_MENU_ITEM_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
     "name": "check_menu_item_english",
-    "description": "Verifies if a specific dish mentioned by the customer (in English) is available on the menu. Use this for all items, including fixed-price combos like 'COMBO #1'.",
+    "description": "Use this to find any item on the menu. This is the primary tool for handling a user's order. It should be used for specific dishes, even if they sound like a general request. For example, use it for 'Customized Combo', 'Family Combo', or 'Lunch Special #1'.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -387,7 +387,7 @@ SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
 
 PROCESS_ORDER_SELECTION_TOOL_SCHEMA: Dict[str, Any] = {
     "name": "handle_standard_item_selection",
-    "description": "Processes selections (e.g., flavor, spice level) for standard, non-combo menu items. **DO NOT use for 'Customized Combo' orders.**",
+    "description": "Processes selections (e.g., flavor, spice level) for standard, non-combo menu items. DO NOT use for 'Customized Combo' orders.",
     "parameters": {
         "type": "object",
         "properties": {

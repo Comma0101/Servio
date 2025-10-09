@@ -74,9 +74,12 @@ class OrderManager:
             logger.error(f"No valid English or Chinese options found for group '{group_name}' in item '{item['item_name']}' for call {call_sid}.")
             return {"status": "ERROR", "message_for_agent": f"I'm sorry, there seems to be an issue with the options for {group_name}."}
 
-        # Handle the "no extras" case for the optional extras group
-        if "pick your extras" in group_name.lower() and "no" in user_input.lower() and "extra" in user_input.lower():
-            logger.info(f"User selected 'no extras' for call {call_sid}.")
+        # Handle the "no extras" case for both optional groups
+        is_optional_extras_group = "pick your extras" in group_name.lower() or "extra sauce" in group_name.lower()
+        user_wants_to_skip = "no" in user_input.lower() or "none" in user_input.lower() or "skip" in user_input.lower()
+        
+        if is_optional_extras_group and user_wants_to_skip:
+            logger.info(f"User declined optional group '{group_name}' for call {call_sid}.")
             # Don't store any selection, just advance to the next step
             item["current_step"] += 1
             return self.get_next_question(call_sid)
@@ -136,9 +139,11 @@ class OrderManager:
         options_str = ", ".join(options)
         message_for_agent = f"For the {item['item_name']}, what would you like for {group_name}? Your options are: {options_str}."
 
-        # Check if the group is the optional extras group and add the "no extras" option.
+        # Add skip option for both optional extras groups
         if "pick your extras" in group_name.lower():
-            message_for_agent += " You can also say 'no extras'."
+            message_for_agent += " You can also say 'no extras' to skip."
+        elif "extra sauce" in group_name.lower():
+            message_for_agent += " You can also say 'no extra sauce' to skip."
 
         return {
             "status": "AWAITING_SELECTION",
