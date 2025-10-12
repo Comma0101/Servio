@@ -1,0 +1,130 @@
+{
+  "plan_title": "Order Flow Redesign - Implementation Guide",
+  "version": "2.0.0",
+  "objective": "Fix critical state leakage and architectural flaws by implementing two new explicit tools for order management before the production launch.",
+  "implementation_phases": [
+    {
+      "phase": 1,
+      "name": "Critical Safety Fix: State Management",
+      "tasks": [
+        {
+          "id": "S1-T1",
+          "title": "Add Combo State Cleanup on Call End",
+          "file": "app/api/websocket.py",
+          "details": [
+            "In the `cleanup_call_data` function, add a call to `combo_order_manager.clear_order(call_sid)`.",
+            "This ensures state is cleared for every call to prevent leakage between sessions.",
+            "Add a log message to confirm that the cleanup operation was performed for the specific call."
+          ]
+        }
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "New Tool Architecture",
+      "tasks": [
+        {
+          "id": "A1-T1",
+          "title": "Define New Tool Schemas",
+          "file": "app/handlers/common_tool_defs.py",
+          "details": [
+            "Add `FINALIZE_CURRENT_ITEM_TOOL_SCHEMA` for the `finalize_current_item` tool.",
+            "Add `PLACE_ORDER_TOOL_SCHEMA` for the `place_order` tool."
+          ]
+        },
+        {
+          "id": "A1-T2",
+          "title": "Implement `handle_finalize_current_item` Handler",
+          "file": "app/handlers/english_tool_logic.py",
+          "details": [
+            "Create the new handler function `handle_finalize_current_item`.",
+            "The logic must check if a combo item is active and finalize it, or check if a standard item is active and finalize it.",
+            "If no item is active, return an appropriate error message.",
+            "After finalizing, add the item to the cart using `order_manager.add_item_to_cart`.",
+            "Return the confirmation message: 'Added [item] to your order. Anything else?'"
+          ]
+        },
+        {
+          "id": "A1-T3",
+          "title": "Implement `handle_place_order` Handler",
+          "file": "app/handlers/english_tool_logic.py",
+          "details": [
+            "Create the new handler function `handle_place_order`.",
+            "The logic must validate the cart is not empty, build the payload for the POS system, and submit the order.",
+            "On success, set a 'placed' flag to prevent duplicate orders, clear the cart, and return a final confirmation message.",
+            "On failure, log the error and return a user-friendly message, keeping the cart intact for a retry."
+          ]
+        },
+        {
+          "id": "A1-T4",
+          "title": "Register New Tools",
+          "file": "app/handlers/deepgram_english_audio_handler_refactored.py",
+          "details": [
+            "Add `finalize_current_item` and `place_order` to the list of available tools for the AI agent.",
+            "Ensure the old `order_summary` tool is removed from the tool registration list."
+          ]
+        }
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "System Prompt Rewrite",
+      "tasks": [
+        {
+          "id": "P1-T1",
+          "title": "Update System Prompt Logic",
+          "file": "app/constants.py",
+          "details": [
+            "Remove the complex conditional logic related to `order_summary` with 'IN PROGRESS' vs 'DONE' statuses.",
+            "Define a clear, simple workflow for the agent using the new tools.",
+            "New Workflow: 1. `check_menu_item` -> 2. Configure item -> 3. `finalize_current_item` -> 4. (Loop for more items or...) -> 5. `place_order`."
+          ]
+        }
+      ]
+    },
+    {
+      "phase": 4,
+      "name": "Verification and Testing",
+      "tasks": [
+        {
+          "id": "V1-T1",
+          "title": "Unit Test New Handlers",
+          "details": [
+            "Write comprehensive unit tests for `handle_finalize_current_item` covering all logic paths.",
+            "Write comprehensive unit tests for `handle_place_order` covering success and failure cases."
+          ]
+        },
+        {
+          "id": "V1-T2",
+          "title": "Integration Test Full Flow",
+          "details": [
+            "Create an end-to-end integration test that simulates a full user call for a combo order.",
+            "Replicate the exact scenario from `log.json` to confirm the state leakage and premature order bugs are fixed.",
+            "Test edge cases such as placing an order with an empty cart, ordering multiple items, and user changing their mind."
+          ]
+        }
+      ]
+    },
+    {
+      "phase": 5,
+      "name": "Final Cleanup",
+      "tasks": [
+        {
+          "id": "C1-T1",
+          "title": "Remove `order_summary` Tool Completely",
+          "details": [
+            "Delete the schema for `order_summary` from `app/handlers/common_tool_defs.py`.",
+            "Delete the handler function `handle_order_summary_thirty_nine_miles_en` from `app/handlers/english_tool_logic.py`.",
+            "Search the codebase for any remaining references to `order_summary` and remove them."
+          ]
+        }
+      ]
+    }
+  ],
+  "success_criteria": [
+    "State does not leak between consecutive calls.",
+    "The AI agent correctly uses `finalize_current_item` and `place_order` at the appropriate times.",
+    "The error loop identified in `log.json` is no longer reproducible.",
+    "The system is robust, clear, and ready for production launch."
+  ]
+}
