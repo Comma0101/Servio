@@ -212,7 +212,25 @@ async def handle_function_call(
     
     try:
         # Handle different function calls
-        if function_name == "order_summary":
+        if function_name == "finalize_current_item":
+            await handle_finalize_current_item(
+                function_call_id,
+                function_name,
+                deepgram_service,
+                call_sid
+            )
+        elif function_name == "place_order":
+            await handle_place_order(
+                function_call_id,
+                function_name,
+                deepgram_service,
+                websocket,
+                stream_sid,
+                caller_phone,
+                call_sid,
+                client_id
+            )
+        elif function_name == "order_summary":
             await handle_order_summary_thirty_nine_miles_en( # Changed to new specific handler
                 function_call_id,
                 function_name, # Pass function_name
@@ -916,6 +934,675 @@ async def handle_send_menu_link(
 
 # The handle_send_combo_menu_sms function is now obsolete and has been removed.
 # The _incorrectly_named_handle_order_summary_actually_list_dishes function is removed.
+
+async def handle_finalize_current_item(
+    function_call_id: str,
+    function_name: str,
+    deepgram_service,
+    call_sid: Optional[str]
+):
+    """
+    Finalizes the current active item (standard or combo) and adds it to the main cart.
+    This replaces the 'order_summary' with summary='IN PROGRESS' pattern.
+    """
+    logger.info(f"Handling {function_name} for call_sid: {call_sid}")
+
+    response_payload = {}
+    item_added = None
+
+    # Check for active combo first
+    if combo_order_manager.is_active(call_sid):
+        item_added = combo_order_manager.finalize_and_get_combo(call_sid)
+        if item_added:
+            order_manager.add_item_to_cart(
+                call_sid,
+                item_added.get("name"),
+                item_added.get("quantity", 1),
+                item_added.get("options", {})
+            )
+            logger.info(f"Finalized and moved combo '{item_added.get('name')}' to cart for call {call_sid}.")
+            response_payload["status"] = "ITEM_ADDED"
+            response_payload["message_for_agent"] = f"Okay, I've added the {item_added.get('name')} to your order. Anything else?"
+        else:
+            logger.error(f"Failed to finalize active combo for call {call_sid}.")
+            response_payload["status"] = "ERROR"
+            response_payload["message_for_agent"] = "I'm sorry, there was an error finalizing that item. Let's try again."
+
+    # Check for active standard item
+    elif order_manager.is_active(call_sid):
+        # The OrderManager automatically finalizes and adds to cart when all options are complete
+        # So if we reach here, the item should already be in the cart from the last process_selection call
+        logger.warning(f"finalize_current_item called but order_manager still has active item for {call_sid}. This shouldn't happen if item was configured properly.")
+        # Try to get the current active item info for the message
+        active_item = order_manager.active_items.get(call_sid, {})
+        item_name = active_item.get("item_name", "the item")
+        response_payload["status"] = "ERROR"
+        response_payload["message_for_agent"] = f"It looks like {item_name} still needs some configuration. Let me ask you about the remaining options."
+
+    # No active item
+    else:
+        logger.warning(f"No active item to finalize for call {call_sid}.")
+        response_payload["status"] = "NO_ACTIVE_ITEM"
+        response_payload["message_for_agent"] = "I'm sorry, there was no active item to finalize. What would you like to order?"
+
+    # Include current cart in response
+    response_payload["current_cart"] = order_manager.get_cart(call_sid)
+
+    # Clean response for TTS
+    cleaned_response = clean_response_for_tts(response_payload)
+    message_for_agent = cleaned_response.get("message_for_agent", "Item added to your order.")
+
+    response = {
+        "type": "FunctionCallResponse",
+        "id": function_call_id,
+        "name": function_name,
+        "content": message_for_agent
+    }
+    await deepgram_service.send_json(response)
+    logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id})")
+
+
+async def handle_place_order(
+    function_call_id: str,
+    function_name: str,
+    deepgram_service,
+    websocket: WebSocket,
+    stream_sid: str,
+    caller_phone: Optional[str],
+    call_sid: Optional[str],
+    client_id: Optional[str]
+):
+    """
+    Validates the cart and places the final order with the Thirty-Nine Miles POS system.
+    This replaces the 'order_summary' with summary='DONE' pattern.
+    
+    Migrated from handle_order_summary_thirty_nine_miles_en - contains only order placement logic.
+    """
+    logger.info(f"Handling {function_name} for call_sid: {call_sid}")
+    
+    # --- DUPLICATE ORDER PREVENTION ---
+    if await has_order_been_placed(call_sid):
+        logger.warning(f"Rejected duplicate 'place_order' call for {call_sid}.")
+        response_content = "The order has already been placed. The call should now be ending."
+        response = {
+            "type": "FunctionCallResponse",
+            "id": function_call_id,
+            "name": function_name,
+            "content": response_content
+        }
+        await deepgram_service.send_json(response)
+        return
+
+    # Get cart items (single source of truth)
+    english_ai_items = order_manager.get_cart(call_sid)
+
+    if not english_ai_items:
+        response_content = "Your cart is empty. Please add items before placing an order."
+        response = {
+            "type": "FunctionCallResponse",
+            "id": function_call_id,
+            "name": function_name,
+            "content": response_content
+        }
+        await deepgram_service.send_json(response)
+        return
+
+    logger.info(f"--- PLACING ORDER --- CallSid: {call_sid}, Items in cart: {len(english_ai_items)}")
+    
+    response_content_payload = {"status": "ERROR", "order_placed": False, "message_for_agent": "An unexpected error occurred while processing your order."}
+    final_confirmation_text_for_tts = ""
+
+    try:
+        # Calculate total from cart items
+        ai_total_price = sum(item.get("quantity", 1) * item.get("price", 0) for item in english_ai_items) if english_ai_items else 0
+        
+        # Save order details to internal DB
+        call_id_for_db = call_sid or f"unknown_call_{int(time.time())}"
+        internal_db_id = await save_order_details(call_id_for_db, english_ai_items, ai_total_price, True)
+        logger.info(f"Saved order summary to local DB (id: {internal_db_id}) for call {call_sid}")
+
+        # Determine portal ID
+        portal_id = None
+        if client_id == "LIMF": 
+            portal_id = THIRTY_NINE_MILES_PORTAL_ID_TAKEOUT
+        elif client_id:
+            from app.utils.constants import get_restaurant_config
+            config = get_restaurant_config(client_id)
+            portal_id = config.get("PORTAL_ID_TAKEOUT") or config.get("PORTAL_ID_THIRTY_NINE_MILES_TAKEOUT")
+        
+        if not portal_id:
+            logger.error(f"Cannot place order: Portal ID for Thirty Nine Miles not found for client_id: {client_id}. Call: {call_sid}")
+            response_content_payload = {"status": "ERROR", "order_placed": False, "message_for_agent": "Configuration error: Cannot determine the restaurant portal for Thirty Nine Miles."}
+            raise ValueError("Portal ID not found for Thirty Nine Miles order placement.")
+
+        # --- Pre-Order Validation Step ---
+        missing_items_messages = []
+        for item in english_ai_items:
+            item_name = item.get("name")
+            if not item_name:
+                continue
+
+            item_details_list = await find_dish_by_english_name(portal_id, item_name)
+            if not item_details_list:
+                missing_items_messages.append(f"Could not verify item '{item_name}' on the menu.")
+                continue
+
+            item_details = item_details_list[0].get("dish_details", {})
+            option_groups = item_details.get("optionGroups", [])
+            if not option_groups:
+                continue
+
+            # --- START: FAMILY COMBO CUSTOM VALIDATION ---
+            if "family combo" in item_name.lower():
+                item_options = item.get("options", {})
+                
+                # 1. Check for crab selection
+                if not item_options.get("crab"):
+                    error_msg = "Order rejected. The Family Combo is missing a crab selection. You must ask the user for their choice."
+                    logger.error(f"Validation failed for call {call_sid}: {error_msg}")
+                    response_content_payload = {"status": "REJECTED", "order_placed": False, "message_for_agent": error_msg}
+                    final_response_to_deepgram = {"type": "FunctionCallResponse", "id": function_call_id, "name": function_name, "content": error_msg}
+                    await deepgram_service.send_json(final_response_to_deepgram)
+                    return
+
+                # 2. Check for the correct number of proteins (3)
+                proteins = item_options.get("proteins", [])
+                if len(proteins) != 3:
+                    error_msg = f"Order rejected. The Family Combo requires 3 protein selections, but {len(proteins)} were found. You must ask the user to clarify."
+                    logger.error(f"Validation failed for call {call_sid}: {error_msg}")
+                    response_content_payload = {"status": "REJECTED", "order_placed": False, "message_for_agent": error_msg}
+                    final_response_to_deepgram = {"type": "FunctionCallResponse", "id": function_call_id, "name": function_name, "content": error_msg}
+                    await deepgram_service.send_json(final_response_to_deepgram)
+                    return
+
+                # 3. Check for the correct number of free items (5)
+                free_items = item_options.get("free_items", [])
+                if len(free_items) != 5:
+                    error_msg = f"Order rejected. The Family Combo requires 5 free item selections, but {len(free_items)} were found. You must ask the user to clarify."
+                    logger.error(f"Validation failed for call {call_sid}: {error_msg}")
+                    response_content_payload = {"status": "REJECTED", "order_placed": False, "message_for_agent": error_msg}
+                    final_response_to_deepgram = {"type": "FunctionCallResponse", "id": function_call_id, "name": function_name, "content": error_msg}
+                    await deepgram_service.send_json(final_response_to_deepgram)
+                    return
+                
+                # If all custom checks pass, skip the generic loop for this item
+                continue 
+            # --- END: FAMILY COMBO CUSTOM VALIDATION ---
+
+            for group in option_groups:
+                if "customized combo" in item_name.lower():
+                    continue
+
+                if group.get("isRequired"):
+                    group_name_en = _get_english_name(group.get("name", {}))
+                    display_group_name = f"'{group_name_en}'" if group_name_en else "a required selection (e.g., protein)"
+                    
+                    item_options = item.get("options", {})
+                    has_selection_for_group = False
+                    
+                    # --- START: ROBUST VALIDATION LOGIC ---
+                    is_protein_group = _is_protein_group(group_name_en) and "free" not in group_name_en.lower()
+                    if "combo #" in item_name.lower() and is_protein_group:
+                        if item_options.get("fixed_combo_selections"):
+                            has_selection_for_group = True
+                    else:
+                        # Original validation for all other items and options
+                        possible_option_names = {_get_english_name(opt.get("name", {})) for opt in group.get("options", [])}
+                        possible_option_names = {name for name in possible_option_names if name}
+
+                        if isinstance(item_options, dict):
+                            if group_name_en in item_options:
+                                selected_value = item_options[group_name_en]
+                                if selected_value in possible_option_names:
+                                    has_selection_for_group = True
+                                else:
+                                    logger.warning(f"Validation mismatch: Selection '{selected_value}' for group '{group_name_en}' is not in the list of possible options: {possible_option_names}")
+                        elif isinstance(item_options, list):
+                            if any(opt in possible_option_names for opt in item_options):
+                                has_selection_for_group = True
+                    # --- END: ROBUST VALIDATION LOGIC ---
+
+                    if not has_selection_for_group:
+                        error_msg = f"Order rejected. The item '{item_name}' is missing a selection for {display_group_name}. You must ask the user for their choice."
+                        logger.error(f"Validation failed for call {call_sid}: {error_msg}")
+                        response_content_payload = {"status": "REJECTED", "order_placed": False, "message_for_agent": error_msg}
+                        final_response_to_deepgram = {
+                            "type": "FunctionCallResponse", "id": function_call_id, "name": function_name,
+                            "content": error_msg
+                        }
+                        await deepgram_service.send_json(final_response_to_deepgram)
+                        return
+
+        processed_pos_items: List[ApiOrderItem] = []
+        calculated_item_subtotal = 0.0
+
+        for ai_item in english_ai_items:
+            item_name_en = ai_item.get("name")
+            quantity = ai_item.get("quantity", 0)
+            if not item_name_en or quantity <= 0: continue
+
+            found_pos_dishes = await find_dish_by_english_name(portal_id, item_name_en)
+            
+            if not found_pos_dishes:
+                missing_items_messages.append(f"Item '{item_name_en}' was not found on the menu.")
+                continue
+
+            # Find the first valid English match from the search results.
+            pos_dish_info = next((d for d in found_pos_dishes if d.get("dish_details", {}).get("name", {}).get("en") and is_primarily_english(d.get("dish_details", {}).get("name", {}).get("en"))), None)
+            
+            if not pos_dish_info:
+                missing_items_messages.append(f"Could not confirm a valid English menu item for '{item_name_en}'.")
+                continue
+            
+            pos_dish_details = pos_dish_info.get("dish_details", {})
+            menu_item_name_en_from_pos = pos_dish_details.get("name", {}).get("en", item_name_en)
+            
+            # Use TextStore for name, ensuring English is primary
+            name_obj_for_pos = TextStore(en=menu_item_name_en_from_pos, zh=pos_dish_details.get("name", {}).get("zh"))
+            
+            product_options_for_pos = []
+            ai_options = ai_item.get("options", {})
+            pos_options = copy.deepcopy(ai_options) if ai_options else {}
+            item_price = 0.0
+            item_weight = ai_item.get("weight")
+
+            all_option_groups_from_menu = pos_dish_details.get("optionGroups", [])
+
+            # Case 1: Combo item with a dictionary of selections
+            if "customized combo" in item_name_en.lower() and isinstance(ai_options, dict) and ai_options:
+                logger.info(f"Processing options for combo item: {item_name_en}")
+                
+                product_options_for_pos, item_price = await process_customized_combo_options(
+                    item_name_en, 
+                    pos_options, 
+                    all_option_groups_from_menu
+                )
+                
+                logger.info(f"Reconstructed {len(product_options_for_pos)} option groups for combo. Final calculated price: {item_price}")
+            
+            # Case 2: Fixed-price combo item
+            elif "combo" in item_name_en.lower() and pos_dish_details.get("price", 0) > 0:
+                logger.info(f"Processing options for fixed-price combo item: {item_name_en}")
+                reconstructed_option_groups = []
+                item_price = float(pos_dish_details.get("price", 0.0))
+
+                # --- START: FAMILY COMBO PAYLOAD MAPPING ---
+                if "family combo" in item_name_en.lower():
+                    logger.info(f"Applying direct mapping for Family Combo payload based on menu structure.")
+                    
+                    ai_options = ai_item.get("options", {})
+                    all_option_groups = pos_dish_details.get("optionGroups", [])
+                    
+                    # Create a flat list of all possible options from the menu for easier searching.
+                    flat_menu_options = []
+                    for group in all_option_groups:
+                        for option in group.get("options", []):
+                            flat_menu_options.append((option, group))
+
+                    # Find all selected options and their original groups
+                    crab_selection = ai_options.get("crab")
+                    protein_selections = ai_options.get("proteins", [])
+                    free_item_selections = ai_options.get("free_items", [])
+
+                    # Find the menu details for each selected option
+                    def find_option_in_menu(selection_name):
+                        # Normalize whitespace for robust matching against inconsistent menu data
+                        normalized_selection_name = ' '.join(selection_name.strip().lower().split())
+                        for option_details, group_details in flat_menu_options:
+                            menu_option_name = _get_english_name(option_details.get("name", {}))
+                            normalized_menu_option_name = ' '.join(menu_option_name.strip().lower().split())
+                            
+                            if normalized_menu_option_name == normalized_selection_name:
+                                return option_details, group_details
+                        logger.warning(f"Family Combo: Could not find menu data for selection '{selection_name}'.")
+                        return None, None
+
+                    # Process selections and prepare them for grouping
+                    matched_crab, crab_group_details = find_option_in_menu(crab_selection) if crab_selection else (None, None)
+                    
+                    matched_proteins = []
+                    protein_group_details = []
+                    for p_name in protein_selections:
+                        opt, group = find_option_in_menu(p_name)
+                        if opt and group:
+                            matched_proteins.append(opt)
+                            protein_group_details.append(group)
+
+                    matched_free_items = []
+                    free_item_group_details = []
+                    for f_name in free_item_selections:
+                        opt, group = find_option_in_menu(f_name)
+                        if opt and group:
+                            matched_free_items.append(opt)
+                            free_item_group_details.append(group)
+
+                    # Build the final list of option groups for the payload
+                    if matched_crab and crab_group_details:
+                        reconstructed_option_groups.append(MenuProductOptionGroup(
+                            name=TextStore(**crab_group_details.get("name", {})),
+                            options=[MenuProductOption(**matched_crab)]
+                        ))
+
+                    # Assign each matched protein to one of the available "PICK 1 POUND" groups
+                    available_protein_groups = [g for g in all_option_groups if "pick 1 pound" in _get_english_name(g.get("name", {})).lower().replace("   ", " ")]
+                    for i, protein_option in enumerate(matched_proteins):
+                        if i < len(available_protein_groups):
+                            group_for_this_protein = available_protein_groups[i]
+                            reconstructed_option_groups.append(MenuProductOptionGroup(
+                                name=TextStore(**group_for_this_protein.get("name", {})),
+                                options=[MenuProductOption(**protein_option)]
+                            ))
+                        else:
+                            logger.warning(f"Family Combo: Not enough 'PICK 1 POUND' groups in menu for protein '{protein_option}'.")
+
+                    # Assign each matched free item to one of the available free groups
+                    available_free_groups = [g for g in all_option_groups if "free" in _get_english_name(g.get("name", {})).lower()]
+                    for i, free_item_option in enumerate(matched_free_items):
+                        if i < len(available_free_groups):
+                            group_for_this_item = available_free_groups[i]
+                            reconstructed_option_groups.append(MenuProductOptionGroup(
+                                name=TextStore(**group_for_this_item.get("name", {})),
+                                options=[MenuProductOption(**free_item_option)]
+                            ))
+                        else:
+                            logger.warning(f"Family Combo: Not enough 'free' groups in menu for item '{free_item_option.get('name')}'.")
+
+                    # Handle other standard options like flavor and spice
+                    other_options = {k: v for k, v in ai_options.items() if k not in ["crab", "proteins", "free_items"]}
+                    for key, value in other_options.items():
+                        target_group = next((g for g in all_option_groups if _get_english_name(g.get("name", {})).strip().lower() == key.strip().lower()), None)
+                        if target_group:
+                            found_option = next((opt for opt in target_group.get("options", []) if _get_english_name(opt.get("name", {})).strip().lower() == str(value).strip().lower()), None)
+                            if found_option:
+                                reconstructed_option_groups.append(MenuProductOptionGroup(
+                                    name=TextStore(**target_group.get("name", {})),
+                                    options=[MenuProductOption(**found_option)]
+                                ))
+                            else:
+                                logger.warning(f"Family Combo: Could not find menu option for '{value}' in group '{key}'.")
+                        else:
+                            logger.warning(f"Family Combo: Could not find option group '{key}'.")
+                    
+                    product_options_for_pos = reconstructed_option_groups
+                    logger.info(f"Reconstructed {len(product_options_for_pos)} option groups for Family Combo using direct mapping.")
+
+                else: # The original generic logic for other combos
+                    protein_option_groups_from_menu = []
+                    for g in pos_dish_details.get("optionGroups", []):
+                        name = g.get("name", {})
+                        if not name: continue
+                        en_name, zh_name = name.get("en"), name.get("zh")
+                        if isinstance(en_name, str) and "choose one" in en_name.lower():
+                            protein_option_groups_from_menu.append(g)
+                        elif isinstance(zh_name, str) and "choose one" in zh_name.lower():
+                            protein_option_groups_from_menu.append(g)
+
+                    if isinstance(pos_options, dict):
+                        if 'fixed_combo_selections' in pos_options:
+                            protein_selections = pos_options.pop('fixed_combo_selections')
+                            all_possible_protein_options = [opt for group in protein_option_groups_from_menu for opt in group.get("options", [])]
+                            matched_protein_options = []
+                            for selected_protein in protein_selections:
+                                found_option = next((opt for opt in all_possible_protein_options if _get_english_name(opt.get("name", {})).strip().lower() == selected_protein.strip().lower()), None)
+                                if found_option:
+                                    matched_protein_options.append(MenuProductOption(**found_option))
+                                    item_price += found_option.get("adjustPrice", 0.0)
+                                else:
+                                    logger.warning(f"Could not find menu option for fixed combo protein: {selected_protein}")
+                            if matched_protein_options:
+                                reconstructed_option_groups.append(MenuProductOptionGroup(name=TextStore(en="CHOOSE ONE", zh="CHOOSE ONE"), options=matched_protein_options))
+
+                        for selection_key, selected_values in pos_options.items():
+                            target_group = next((g for g in all_option_groups_from_menu if _get_english_name(g.get("name", {})).strip().lower() == selection_key.strip().lower()), None)
+                            if not target_group:
+                                logger.warning(f"Could not find any option group named '{selection_key}' for combo '{item_name_en}'.")
+                                continue
+                            if not isinstance(selected_values, list): selected_values = [selected_values]
+                            all_possible_options = target_group.get("options", [])
+                            matched_options_for_group = []
+                            for selected_value in selected_values:
+                                selected_value_name = selected_value if isinstance(selected_value, str) else selected_value.get("name")
+                                if not selected_value_name: continue
+                                found_option = next((opt for opt in all_possible_options if _get_english_name(opt.get("name", {})) == selected_value_name), None)
+                                if found_option:
+                                    matched_options_for_group.append(MenuProductOption(**found_option))
+                                    item_price += found_option.get("adjustPrice", 0.0)
+                                else:
+                                    logger.warning(f"Could not find selected option '{selected_value_name}' in the '{selection_key}' group.")
+                            if matched_options_for_group:
+                                reconstructed_option_groups.append(MenuProductOptionGroup(name=TextStore(**target_group.get("name", {})), options=matched_options_for_group))
+                    
+                    product_options_for_pos = reconstructed_option_groups
+                    logger.info(f"Reconstructed {len(product_options_for_pos)} option groups for fixed-price combo. Final calculated price: {item_price}")
+
+            # Case 3: Non-combo item with a dictionary of {group_name: selection}
+            elif isinstance(ai_options, dict) and ai_options:
+                logger.info(f"Processing options for non-combo item with dict options: {item_name_en}")
+                reconstructed_option_groups = []
+                item_price = float(pos_dish_details.get("price", 0.0))
+
+                for selection_key, selected_value in ai_options.items():
+                    target_group = next((g for g in all_option_groups_from_menu if _get_english_name(g.get("name", {})).strip().lower() == selection_key.strip().lower()), None)
+                    
+                    if not target_group:
+                        logger.warning(f"Could not find option group '{selection_key}' for item '{item_name_en}'.")
+                        continue
+
+                    found_option = next((opt for opt in target_group.get("options", []) if _get_english_name(opt.get("name", {})).strip().lower() == str(selected_value).strip().lower()), None)
+
+                    if found_option:
+                        group_name_for_pos = TextStore(en=_get_english_name(target_group.get("name", {})), zh=target_group.get("name", {}).get("zh"))
+                        option_name_for_pos = TextStore(en=_get_english_name(found_option.get("name", {})), zh=found_option.get("name", {}).get("zh"))
+                        
+                        option_for_pos_data = found_option.copy()
+                        option_for_pos_data['name'] = option_name_for_pos
+
+                        reconstructed_option_groups.append(MenuProductOptionGroup(
+                            name=group_name_for_pos,
+                            options=[MenuProductOption(**option_for_pos_data)]
+                        ))
+                        item_price += found_option.get("adjustPrice", 0.0)
+                    else:
+                        logger.warning(f"Could not find selected option '{selected_value}' in group '{selection_key}' for item '{item_name_en}'.")
+                
+                product_options_for_pos = reconstructed_option_groups
+                logger.info(f"Reconstructed {len(product_options_for_pos)} option groups for non-combo dict. Final price: {item_price}")
+
+            # Case 4: No options or item is not a combo
+            else:
+                if pos_options:
+                    logger.warning(f"Item '{item_name_en}' has options in an unhandled format: {type(pos_options)}. Skipping.")
+                item_price = float(pos_dish_details.get("price", 0.0))
+
+            processed_pos_items.append(ApiOrderItem(
+                name=name_obj_for_pos,
+                category_id=str(pos_dish_info.get("category_id")),
+                product_id=str(pos_dish_info.get("dish_id")),
+                quantity=quantity,
+                weight=item_weight,
+                final_price=item_price,
+                product_options=product_options_for_pos
+            ))
+            calculated_item_subtotal += item_price * quantity
+        
+        if missing_items_messages:
+            msg = " ".join(missing_items_messages) + " Cannot complete the order."
+            logger.error(f"Order placement failed (missing/unconfirmed items) for call {call_sid}: {msg}")
+            response_content_payload = {"status": "ERROR", "order_placed": False, "message_for_agent": msg}
+            raise ValueError(msg)
+
+        if not processed_pos_items:
+            response_content_payload = {"status": "ERROR", "order_placed": False, "message_for_agent": "No valid items to place in the order."}
+            raise ValueError("No valid items for POS order placement.")
+
+        # Get tax rate from config
+        tax_rate_from_config = 0.08  # TODO: Make this configurable
+        tax_amount = round(calculated_item_subtotal * tax_rate_from_config, 2)
+        final_payment_amount = round(calculated_item_subtotal + tax_amount, 2)
+        
+        api_order_to_pos = ApiOrderDto(
+            portal_id=portal_id,
+            customer_phone=caller_phone or "N/A",
+            user_name=caller_phone or "AI Voice Order",
+            lang_code=LangCode.EN,
+            order_items=processed_pos_items,
+            item_subtotal=round(calculated_item_subtotal, 2),
+            tax=tax_amount,
+            tips=0.0,
+            bag_fee=0.0,
+            final_payment=final_payment_amount
+        )
+        logger.info(f"Attempting to place English order with 39Miles. Payload: {api_order_to_pos.model_dump_json(indent=2)}. Call: {call_sid}")
+        
+        tnm_pos_response = await add_thirty_nine_miles_order(api_order_to_pos)
+        logger.info(f"39Miles add_order response (English flow): {tnm_pos_response}. Call: {call_sid}")
+
+        if tnm_pos_response and tnm_pos_response.get("success"):
+            external_pos_order_id = tnm_pos_response.get("data")
+            if isinstance(external_pos_order_id, str) and external_pos_order_id:
+                logger.info(f"Successfully placed English order with 39Miles. External Order ID: {external_pos_order_id}. Call: {call_sid}")
+                
+                # --- START: SIMPLIFIED TTS CONFIRMATION ---
+                # Build a simple, clear list of items that the AI will read completely
+                item_descriptions = []
+                for item in english_ai_items:
+                    qty = item.get("quantity", 1)
+                    item_name = item.get("name")
+                    
+                    # For multiple quantities, prefix with the count
+                    if qty > 1:
+                        item_descriptions.append(f"{qty} {item_name}")
+                    else:
+                        item_descriptions.append(item_name)
+                
+                # Create a natural-sounding list
+                if len(item_descriptions) == 1:
+                    items_str = item_descriptions[0]
+                elif len(item_descriptions) == 2:
+                    items_str = f"{item_descriptions[0]} and {item_descriptions[1]}"
+                else:
+                    items_str = ", ".join(item_descriptions[:-1]) + f", and {item_descriptions[-1]}"
+                
+                final_confirmation_text_for_tts = f"Okay, your order {external_pos_order_id} is confirmed. It includes {items_str}, for a total of ${final_payment_amount:.2f}. It will be ready for pickup shortly. Thank you for your call, goodbye!"
+                # --- END: SIMPLIFIED TTS CONFIRMATION ---
+
+                response_content_payload = {"status": "OK", "order_placed": True, "external_order_id": external_pos_order_id, "internal_order_id": internal_db_id, "message_for_agent": final_confirmation_text_for_tts}
+                
+                # --- SET ORDER PLACED FLAG ---
+                await set_order_placed_flag(call_sid)
+                
+                if deepgram_service:
+                    deepgram_service.is_final_confirmation_sent = True
+
+                if caller_phone:
+                    dishes_sms_str = []
+                    for item in english_ai_items:
+                        item_str = f"{item.get('quantity', 1)}x {item.get('name', 'Item')}"
+                        
+                        options_desc = []
+                        if isinstance(item.get("options"), dict):
+                            selections = item.get("options", {})
+                            item_name_lower = item.get("name", "").lower()
+
+                            # --- START: FAMILY COMBO SMS FIX ---
+                            if "family combo" in item_name_lower:
+                                protein_list = selections.get("proteins", [])
+                                if protein_list:
+                                    options_desc.append(f"Proteins: {', '.join(protein_list)}")
+
+                                # Also include other options like crab, flavor, and spice
+                                other_options = {k: v for k, v in selections.items() if k.lower() != 'proteins'}
+                                for key, value in other_options.items():
+                                    formatted_key = key.replace("_", " ").title()
+                                    if isinstance(value, list):
+                                        value_str = ', '.join(map(str, value))
+                                        options_desc.append(f"{formatted_key}: {value_str}")
+                                    else:
+                                        options_desc.append(f"{formatted_key}: {value}")
+                            # --- END: FAMILY COMBO SMS FIX ---
+                            else:
+                                # Existing logic for other items
+                                if 'proteins' in selections:
+                                    protein_details_list = []
+                                    for p in selections.get("proteins", []):
+                                        if isinstance(p, dict):
+                                            protein_name = p.get('name')
+                                            protein_size = p.get('size', '1 lb')
+                                            if protein_name:
+                                                protein_details_list.append(f"{protein_size} {protein_name}")
+                                    if protein_details_list:
+                                        options_desc.append(f"Proteins: {', '.join(protein_details_list)}")
+                                
+                                if 'fixed_combo_selections' in selections:
+                                    selections_list = selections.get("fixed_combo_selections", [])
+                                    if selections_list:
+                                        options_desc.append(f"Selections: {', '.join(selections_list)}")
+
+                                for key, value in selections.items():
+                                    if key.lower() not in ["proteins", "fixed_combo_selections"]:
+                                        formatted_key = key.replace("_", " ").title()
+                                        if isinstance(value, list):
+                                            value_str = ', '.join(map(str, value))
+                                            options_desc.append(f"{formatted_key}: {value_str}")
+                                        else:
+                                            options_desc.append(f"{formatted_key}: {value}")
+
+                        elif isinstance(item.get("options"), list):
+                            # Handle simple lists of options for non-combo items
+                            options_desc.extend(item.get("options", []))
+                        
+                        if options_desc:
+                            item_str += f" ({'; '.join(options_desc)})"
+                        
+                        dishes_sms_str.append(item_str)
+                    
+                    dishes_final_str = "; ".join(dishes_sms_str)
+                    from app.utils.constants import get_restaurant_config
+                    sms_body_en = f"Your order {external_pos_order_id} with {get_restaurant_config(client_id).get('RESTAURANT_NAME', 'us')} is confirmed! Items: {dishes_final_str}. Total: ${api_order_to_pos.final_payment:.2f}. Thank you!"
+                    
+                    import functools
+                    loop = asyncio.get_event_loop()
+                    sms_task_en = functools.partial(send_sms, caller_phone, sms_body_en, client_id) 
+                    loop.run_in_executor(None, sms_task_en)
+                    logger.info(f"Scheduled English SMS confirmation for {caller_phone}")
+                
+                # Clear the cart after successful order placement
+                clear_cart(call_sid)
+            else: 
+                final_confirmation_text_for_tts = "Your order has been submitted, but we couldn't get a confirmation number at this moment. Please check with us shortly."
+                response_content_payload = {"status": "ERROR", "order_placed": False, "message_for_agent": final_confirmation_text_for_tts}
+                if deepgram_service:
+                    deepgram_service.is_final_confirmation_sent = True
+        else: 
+            err_msg_from_pos = tnm_pos_response.get("message", "an unknown issue") if tnm_pos_response else "no response from the POS"
+            final_confirmation_text_for_tts = f"We encountered an issue submitting your order: {err_msg_from_pos}. Please try again or call us directly."
+            response_content_payload = {"status": "ERROR", "order_placed": False, "message_for_agent": final_confirmation_text_for_tts}
+            if deepgram_service:
+                deepgram_service.is_final_confirmation_sent = True
+
+    except ValueError as ve:
+        logger.error(f"Value error processing place_order: {ve} for call {call_sid}")
+        if "message_for_agent" not in response_content_payload or not response_content_payload["message_for_agent"]:
+            response_content_payload["message_for_agent"] = str(ve)
+        final_confirmation_text_for_tts = response_content_payload.get("message_for_agent", "An error occurred.")
+    except Exception as e:
+        logger.error(f"Error processing place_order: {e} for call {call_sid}", exc_info=True)
+        response_content_payload = {"status": "ERROR", "order_placed": False, "message_for_agent": "An internal error occurred while processing your order. Please try again."}
+        final_confirmation_text_for_tts = response_content_payload.get("message_for_agent", "An internal error occurred.")
+
+    # Send final response
+    response_output_content = final_confirmation_text_for_tts if final_confirmation_text_for_tts else response_content_payload.get("message_for_agent", "An error occurred.")
+    output_content_for_deepgram = clean_text_for_tts(response_output_content)
+
+    final_response_to_deepgram = {
+        "type": "FunctionCallResponse",
+        "id": function_call_id,
+        "name": function_name,
+        "content": output_content_for_deepgram
+    }
+    await deepgram_service.send_json(final_response_to_deepgram)
+    logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}): {output_content_for_deepgram}")
+
 
 # Corrected signature and new function for Thirty Nine Miles English Order Summary
 async def handle_order_summary_thirty_nine_miles_en(

@@ -168,8 +168,8 @@ class ComboOrderManager:
         """Removes prefixes like '1 lb.' for cleaner TTS prompts."""
         if not original_name:
             return ""
-        # This regex removes variations of "1 lb", "1.5 Lb.", and leading numbers for cleaner TTS.
-        cleaned = re.sub(r'^\d+(\.\d+)?\s?lb?\.?\s*', '', original_name, flags=re.IGNORECASE).strip()
+        # This regex removes variations of "1 lb", "1.5 lbs.", and leading numbers for cleaner TTS.
+        cleaned = re.sub(r'^\d+(\.\d+)?\s?lbs?\.?\s*', '', original_name, flags=re.IGNORECASE).strip()
         return cleaned
 
     def _clean_prompt_text(self, text: str) -> str:

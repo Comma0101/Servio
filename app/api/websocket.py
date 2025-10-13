@@ -15,15 +15,17 @@ import traceback
 from app.services.deepgram_service import DeepgramService
 from app.handlers.chinese_audio_openai_handler import ChineseAudioOpenAIHandler
 from app.handlers.chinese_audio_bytedance_handler import ChineseAudioByteDanceHandler
+from app.handlers.combo_order_manager import combo_order_manager
+from app.handlers.order_manager import order_manager
 from app.utils.constants import get_restaurant_config, get_restaurant_menu
 from app.handlers.common_tool_defs import (
-    ORDER_SUMMARY_TOOL_SCHEMA_EN_OPENAI,
+    FINALIZE_CURRENT_ITEM_TOOL_SCHEMA,
+    PLACE_ORDER_TOOL_SCHEMA,
+    ORDER_SUMMARY_TOOL_SCHEMA_EN_OPENAI,  # DEPRECATED
     CHECK_MENU_ITEM_TOOL_SCHEMA_EN_OPENAI,
-    # LIST_DISHES_BY_CATEGORY_TOOL_SCHEMA_EN_OPENAI,
-    # RECOMMEND_DISHES_TOOL_SCHEMA_EN_OPENAI,
-    # GET_RANDOM_MENU_CATEGORIES_TOOL_SCHEMA_EN_OPENAI,
     SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI,
-    PROCESS_ORDER_SELECTION_TOOL_SCHEMA
+    PROCESS_ORDER_SELECTION_TOOL_SCHEMA,
+    PROCESS_COMBO_SELECTION_TOOL_SCHEMA
 )
 try:
     from google.cloud import texttospeech_v1 as texttospeech
@@ -127,6 +129,12 @@ def cleanup_call_data(call_sid: str):
     if redis_client.exists(call_sid):
         redis_client.delete(call_sid)
         logger.info(f"Removed caller info for CallSid: {call_sid} from Redis")
+    
+    # --- CRITICAL STATE CLEANUP ---
+    combo_order_manager.clear_order(call_sid)
+    order_manager.clear_cart(call_sid)
+    logger.info(f"Cleared combo and order manager state for CallSid: {call_sid}")
+    # --- END CRITICAL STATE CLEANUP ---
 
 # --- End Global Storage ---
 
@@ -536,13 +544,12 @@ async def handle_media_stream(websocket: WebSocket):
         # Define function definitions based on language
         # These are now imported from common_tool_defs.py
         all_english_function_definitions = [
-            ORDER_SUMMARY_TOOL_SCHEMA_EN_OPENAI,
+            FINALIZE_CURRENT_ITEM_TOOL_SCHEMA,
+            PLACE_ORDER_TOOL_SCHEMA,
             CHECK_MENU_ITEM_TOOL_SCHEMA_EN_OPENAI,
-            # LIST_DISHES_BY_CATEGORY_TOOL_SCHEMA_EN_OPENAI,
-            # RECOMMEND_DISHES_TOOL_SCHEMA_EN_OPENAI,
-            # GET_RANDOM_MENU_CATEGORIES_TOOL_SCHEMA_EN_OPENAI,
             SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI,
-            PROCESS_ORDER_SELECTION_TOOL_SCHEMA
+            PROCESS_ORDER_SELECTION_TOOL_SCHEMA,
+            PROCESS_COMBO_SELECTION_TOOL_SCHEMA
         ]
         
         # Initialize based on language

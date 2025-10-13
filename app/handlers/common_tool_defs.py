@@ -278,6 +278,27 @@ LIST_DISHES_BY_CATEGORY_TOOL_SCHEMA_CN_OPENAI: Dict[str, Any] = {
 
 # --- Tool Schemas for English Agent (OpenAI/Deepgram compatible) ---
 
+FINALIZE_CURRENT_ITEM_TOOL_SCHEMA: Dict[str, Any] = {
+    "name": "finalize_current_item",
+    "description": "Finalizes the current item being configured and adds it to the cart. Call this tool after the user confirms their selections for an item are complete. This replaces the 'order_summary' with 'IN PROGRESS' pattern.",
+    "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+    }
+}
+
+PLACE_ORDER_TOOL_SCHEMA: Dict[str, Any] = {
+    "name": "place_order",
+    "description": "Places the entire order with the restaurant's POS system. Call this tool ONLY when the customer explicitly states they are finished ordering (e.g., 'that's all', 'place the order'). This replaces the 'order_summary' with 'DONE' pattern.",
+    "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+    }
+}
+
+# DEPRECATED: Will be removed after testing new tools
 ORDER_SUMMARY_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
     "name": "order_summary", # Keep name generic if logic is shared
     "description": "CRITICAL: Use this tool ONLY for the FINAL summary of the ENTIRE order. DO NOT use this if a combo is being built. Using this tool mid-combo will break the order.",

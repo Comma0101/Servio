@@ -215,15 +215,20 @@ async def _find_dish(portal_id: str, name_to_find: str, language: Literal['en', 
     # 2. If no exact match, fall back to a general fuzzy match for English queries.
     if language == 'en':
         all_dish_names = [dish.get(name_key, "") for dish in all_dishes]
-        # Use the original, un-normalized query for fuzzy matching to get the best result.
-        best_match_name, score = process.extractOne(original_query, all_dish_names)
+        # Use extract() to get ALL matches above threshold, not just the best one
+        matches = process.extract(original_query, all_dish_names, limit=None)
+        good_matches = [(name, score) for name, score in matches if score > 80]
         
-        # Set a confidence threshold to avoid incorrect matches.
-        if score > 80:
-            best_match_dish = next((dish for dish in all_dishes if dish.get(name_key, "") == best_match_name), None)
-            if best_match_dish:
-                logger.info(f"Found general fuzzy match for '{original_query}' with score {score}. Best match: '{best_match_name}'")
-                return [best_match_dish]
+        if good_matches:
+            # Get all dishes that match well
+            matched_dishes = [dish for dish in all_dishes 
+                            if dish.get(name_key, "") in [m[0] for m in good_matches]]
+            if matched_dishes:
+                # Log all matches found
+                match_names = [dish.get(name_key, "") for dish in matched_dishes]
+                scores_str = ", ".join([f"'{m[0]}' (score: {m[1]})" for m in good_matches])
+                logger.info(f"Found {len(matched_dishes)} general fuzzy match(es) for '{original_query}': {scores_str}")
+                return matched_dishes  # Return all matches for ambiguity handling
 
     # 3. If still no match, fall back to fuzzy matching specifically for combos
     if "combo" in search_term_lower and language == 'en':

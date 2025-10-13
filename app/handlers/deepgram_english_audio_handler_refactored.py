@@ -26,11 +26,10 @@ from app.handlers.english_tool_logic import clean_text_for_tts
 from app.handlers.combo_order_manager import combo_order_manager
 from app.handlers.order_manager import order_manager
 from app.handlers.common_tool_defs import (
-    ORDER_SUMMARY_TOOL_SCHEMA_EN_OPENAI,
+    FINALIZE_CURRENT_ITEM_TOOL_SCHEMA,
+    PLACE_ORDER_TOOL_SCHEMA,
+    ORDER_SUMMARY_TOOL_SCHEMA_EN_OPENAI,  # DEPRECATED
     CHECK_MENU_ITEM_TOOL_SCHEMA_EN_OPENAI,
-    # LIST_DISHES_BY_CATEGORY_TOOL_SCHEMA_EN_OPENAI,
-    # RECOMMEND_DISHES_TOOL_SCHEMA_EN_OPENAI,
-    # GET_RANDOM_MENU_CATEGORIES_TOOL_SCHEMA_EN_OPENAI,
     SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI,
     PROCESS_ORDER_SELECTION_TOOL_SCHEMA,
     PROCESS_COMBO_SELECTION_TOOL_SCHEMA
@@ -63,14 +62,12 @@ class DeepgramEnglishAudioHandler():
         # Store configuration for future language switching
         self.system_message = system_message # Will be populated with LIMF default if None in _update_deepgram_language
         self.function_definitions = function_definitions or [
-            ORDER_SUMMARY_TOOL_SCHEMA_EN_OPENAI,
+            FINALIZE_CURRENT_ITEM_TOOL_SCHEMA,
+            PLACE_ORDER_TOOL_SCHEMA,
             CHECK_MENU_ITEM_TOOL_SCHEMA_EN_OPENAI,
-            # LIST_DISHES_BY_CATEGORY_TOOL_SCHEMA_EN_OPENAI,
-            # RECOMMEND_DISHES_TOOL_SCHEMA_EN_OPENAI,
-            # GET_RANDOM_MENU_CATEGORIES_TOOL_SCHEMA_EN_OPENAI,
             SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI,
-            PROCESS_ORDER_SELECTION_TOOL_SCHEMA, # This will be renamed in the schema file
-            PROCESS_COMBO_SELECTION_TOOL_SCHEMA # This will be renamed in the schema file
+            PROCESS_ORDER_SELECTION_TOOL_SCHEMA,
+            PROCESS_COMBO_SELECTION_TOOL_SCHEMA
         ]
         
         # Initialize caller information
