@@ -290,7 +290,7 @@ FINALIZE_CURRENT_ITEM_TOOL_SCHEMA: Dict[str, Any] = {
 
 PLACE_ORDER_TOOL_SCHEMA: Dict[str, Any] = {
     "name": "place_order",
-    "description": "Places the entire order with the restaurant's POS system. Call this tool ONLY when the customer explicitly states they are finished ordering (e.g., 'that's all', 'place the order'). This replaces the 'order_summary' with 'DONE' pattern.",
+    "description": "Places the entire order with the restaurant's POS system. Call this tool ONLY when the customer explicitly states they are finished ordering (e.g., 'that's all', 'I'm done', 'place the order', 'checkout'). DO NOT call this tool if the user says 'remove', 'delete', 'cancel', 'take out', 'change', 'edit', or asks questions about their order. This is ONLY for finalizing and submitting the order.",
     "parameters": {
         "type": "object",
         "properties": {},
@@ -338,13 +338,13 @@ ORDER_SUMMARY_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
 
 CHECK_MENU_ITEM_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
     "name": "check_menu_item_english",
-    "description": "Use this to find any item on the menu. This is the primary tool for handling a user's order. It should be used for specific dishes, even if they sound like a general request. For example, use it for 'Customized Combo', 'Family Combo', or 'Lunch Special #1'.",
+    "description": "CRITICAL: Use this tool ONLY when a customer wants to ADD a new item to their order. Keywords for adding: 'I want', 'add', 'get me', 'order'. DO NOT use this tool if the user says 'remove', 'delete', 'take out', 'take off', 'cancel', 'I don't want', 'change', 'edit', 'modify', or 'update'. For those actions, you MUST use remove_cart_item, edit_cart_item, or update_cart_quantity instead.",
     "parameters": {
         "type": "object",
         "properties": {
             "dish_name_en": {
                 "type": "string",
-                "description": "The English name of the dish to check."
+                "description": "The English name of the dish to add."
             }
         },
         "required": ["dish_name_en"]
@@ -408,7 +408,7 @@ SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
 
 PROCESS_ORDER_SELECTION_TOOL_SCHEMA: Dict[str, Any] = {
     "name": "handle_standard_item_selection",
-    "description": "Processes selections (e.g., flavor, spice level) for standard, non-combo menu items. DO NOT use for 'Customized Combo' orders.",
+    "description": "CRITICAL: Use this tool ONLY for configuring NEW items during the ordering process (e.g., selecting flavor, spice level, size). DO NOT use this tool for cart modifications (remove, edit, quantity changes) - use the specific cart tools instead. DO NOT use for 'Customized Combo' orders.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -454,6 +454,68 @@ PROCESS_COMBO_SELECTION_TOOL_SCHEMA: Dict[str, Any] = {
 # LIST_PROTEIN_OPTIONS_TOOL_SCHEMA: Dict[str, Any] = {
 #     "name": "list_protein_options_for_combo",
 #     "description": "Lists the available protein options for a combo order when the user asks for them.",
+#     "parameters": {
+#         "type": "object",
+#         "properties": {},
+#         "required": []
+#     }
+# }
+
+# --- Cart Modification Tool Schemas ---
+
+# REMOVE_CART_ITEM_TOOL_SCHEMA: Dict[str, Any] = {
+#     "name": "remove_cart_item",
+#     "description": "CRITICAL - CART REMOVAL TOOL: This is the ONLY tool for removing items from the cart. Use this tool IMMEDIATELY if the customer says ANY of these words: 'remove', 'delete', 'take out', 'take off', 'take that off', 'cancel', 'I don't want', 'get rid of', 'nevermind', or refers to removing 'that', 'it', or 'the last item'. DO NOT use place_order, check_menu_item, or ANY other tool when the user wants to remove something. Examples that MUST use this tool: 'remove the oyster', 'can you remove that?', 'delete it', 'take that off', 'I don't want it anymore'.",
+#     "parameters": {
+#         "type": "object",
+#         "properties": {
+#             "item_identifier": {
+#                 "type": "string",
+#                 "description": "The name of the item to remove (e.g., 'oyster', 'combo'). Use 'last' if they say 'that', 'it', or 'the last one'."
+#             }
+#         },
+#         "required": ["item_identifier"]
+#     }
+# }
+
+# UPDATE_CART_QUANTITY_TOOL_SCHEMA: Dict[str, Any] = {
+#     "name": "update_cart_quantity",
+#     "description": "CRITICAL: Use this tool when customer wants to change the quantity of an existing cart item. Keywords: 'make it 2', 'change to 3', 'I want 4 of those', 'update quantity'. DO NOT use check_menu_item_english for quantity changes.",
+#     "parameters": {
+#         "type": "object",
+#         "properties": {
+#             "item_identifier": {
+#                 "type": "string",
+#                 "description": "The name of the item to update. Can be 'last' for the most recent item."
+#             },
+#             "new_quantity": {
+#                 "type": "integer",
+#                 "description": "The new quantity (must be 1 or greater).",
+#                 "minimum": 1
+#             }
+#         },
+#         "required": ["item_identifier", "new_quantity"]
+#     }
+# }
+
+# EDIT_CART_ITEM_TOOL_SCHEMA: Dict[str, Any] = {
+#     "name": "edit_cart_item",
+#     "description": "CRITICAL: Use this tool when customer wants to change options on an existing cart item. Keywords: 'change the flavor', 'make it spicy', 'different seasoning', 'edit that'. DO NOT use check_menu_item_english for modifications.",
+#     "parameters": {
+#         "type": "object",
+#         "properties": {
+#             "item_identifier": {
+#                 "type": "string",
+#                 "description": "The name of the item to edit. Can be 'last' for the most recent item."
+#             }
+#         },
+#         "required": ["item_identifier"]
+#     }
+# }
+
+# VIEW_CART_TOOL_SCHEMA: Dict[str, Any] = {
+#     "name": "view_cart",
+#     "description": "CRITICAL: Use this tool when customer asks about their current order. Keywords: 'what do I have?', 'what's in my order?', 'what did I order?', 'show me my cart', 'what's my order?'. DO NOT use check_menu_item_english for viewing cart.",
 #     "parameters": {
 #         "type": "object",
 #         "properties": {},

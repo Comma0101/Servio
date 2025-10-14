@@ -365,6 +365,49 @@ async def handle_function_call(
                 deepgram_service,
                 call_sid
             )
+        # elif function_name == "remove_cart_item":
+        #     await handle_remove_cart_item(
+        #         function_call_id,
+        #         function_name,
+        #         input_data,
+        #         deepgram_service,
+        #         call_sid
+        #     )
+        # elif function_name == "update_cart_quantity":
+        #     await handle_update_cart_quantity(
+        #         function_call_id,
+        #         function_name,
+        #         input_data,
+        #         deepgram_service,
+        #         call_sid
+        #     )
+        # elif function_name == "edit_cart_item":
+        #     portal_id = THIRTY_NINE_MILES_PORTAL_ID_TAKEOUT if client_id == "LIMF" else None
+        #     if not portal_id:
+        #         logger.error(f"Cannot edit cart item: portal_id missing for client {client_id}")
+        #         response = {
+        #             "type": "FunctionCallResponse",
+        #             "id": function_call_id,
+        #             "name": function_name,
+        #             "content": "Internal configuration error: Cannot determine restaurant portal."
+        #         }
+        #         await deepgram_service.send_json(response)
+        #         return
+        #     await handle_edit_cart_item(
+        #         function_call_id,
+        #         function_name,
+        #         input_data,
+        #         deepgram_service,
+        #         call_sid,
+        #         portal_id
+        #     )
+        # elif function_name == "view_cart":
+        #     await handle_view_cart(
+        #         function_call_id,
+        #         function_name,
+        #         deepgram_service,
+        #         call_sid
+        #     )
         else:
             logger.warning(f"Unknown function call: {function_name}")
             response_content_str = f"The function {function_name} is not implemented."
@@ -422,68 +465,80 @@ async def handle_check_menu_item_english(
                         valid_matches.append(dish_data)
                 
                 if valid_matches:
-                    # For simplicity, take the first valid match.
-                    first_valid_match_details = valid_matches[0].get("dish_details", {})
-                    name_en_to_use = _get_english_name(first_valid_match_details.get("name"), dish_name_en_query)
-                    price_en = first_valid_match_details.get("price")
-
-                    # Universal cleaning for all option group names before sending to AI
-                    raw_option_groups = first_valid_match_details.get("optionGroups") # Correctly get potential None
-                    if raw_option_groups is None:
-                        raw_option_groups = [] # Default to empty list if no options exist
-
-                    for group in raw_option_groups:
-                        if group.get("name") and group.get("name", {}).get("en"):
-                            group["name"]["en"] = clean_text_for_tts(group["name"]["en"])
-
-                    # If the item has no required options and is not a combo, add it directly to the cart.
-                    has_required_options = any(group.get("isRequired") for group in raw_option_groups)
-                    name_lower = name_en_to_use.lower()
-
-                    if not has_required_options:
-                        quantity = input_data.get("quantity", 1)
-                        order_manager.add_item_to_cart(call_sid, name_en_to_use, quantity, {})
-                        output_payload["added_to_cart"] = True
-                        output_payload["tool_to_use"] = None  # Explicitly tell AI no further action needed
-                        output_payload["message_for_agent"] = f"Okay, I've added {quantity} {name_en_to_use} to your order. What else can I get for you?"
-                    # --- START OF NEW LOGIC ---
-                    # Check if the item is one of the special combos that needs the combo manager
-                    elif "customized combo" in name_lower or "combo #1" in name_lower or "combo #2" in name_lower or "combo #3" in name_lower or "family combo" in name_lower:
-                        # Fetch the full menu to pass to the specialized manager
-                        live_menu_response = await get_extracted_dishes(portal_id)
-                        live_menu_data = live_menu_response.get("data", [])
-                        
-                        # Use the specialized combo manager for a better conversational start
-                        response_from_manager = combo_order_manager.start_combo_order(name_en_to_use, call_sid, live_menu_data)
-                        
-                        output_payload["message_for_agent"] = response_from_manager.get("message_for_agent")
-                        output_payload["tool_to_use"] = "handle_combo_item_selection"
-                        await set_next_tool(call_sid, "handle_combo_item_selection")
-                    # --- END OF NEW LOGIC ---
-                    else:
-                        # For all other items with options, use the generic manager
-                        quantity = input_data.get("quantity", 1)
-                        response_from_manager = order_manager.start_item(first_valid_match_details, quantity, call_sid)
-                        output_payload["message_for_agent"] = response_from_manager.get("message_for_agent")
-                        output_payload["tool_to_use"] = "handle_standard_item_selection"
-
-                    output_payload["found"] = True
-                    
-                    output_payload["message_for_agent"] = clean_text_for_tts(output_payload["message_for_agent"])
-                    # Simplified ambiguity handling: if more than one valid match, flag it.
+                    # Check for ambiguity FIRST before processing
                     if len(valid_matches) > 1:
                         output_payload["is_ambiguous"] = True
                         ambiguous_names = [
                             _get_english_name(match.get("dish_details", {}).get("name"))
                             for match in valid_matches
                         ]
-                        # Filter out any empty names that might have slipped through
                         ambiguous_names = [name for name in ambiguous_names if name]
                         output_payload["ambiguous_matches_en"] = ambiguous_names
-                        output_payload["message_for_agent"] = f"Found multiple items for '{dish_name_en_query}'. Options: {', '.join(ambiguous_names)}. Please clarify."
+                        
+                        # Store pending ambiguous state for resolution
+                        quantity = input_data.get("quantity", 1)
+                        order_manager.set_pending_ambiguous(
+                            call_sid, 
+                            ambiguous_names, 
+                            valid_matches,
+                            dish_name_en_query,
+                            quantity
+                        )
+                        
+                        # Format options naturally without numbers
+                        if len(ambiguous_names) == 2:
+                            dish_list = f"{ambiguous_names[0]} or {ambiguous_names[1]}"
+                        else:
+                            dish_list = ", ".join(ambiguous_names[:-1]) + f", or {ambiguous_names[-1]}"
+                        
+                        output_payload["message_for_agent"] = f"I found multiple options for '{dish_name_en_query}': {dish_list}. Which one would you like?"
+                        output_payload["found"] = True
+                        output_payload["tool_to_use"] = "handle_standard_item_selection"
+                        logger.info(f"Ambiguous matches found for '{dish_name_en_query}': {ambiguous_names}")
                     else:
+                        # Single match - proceed with normal processing
                         output_payload["is_ambiguous"] = False
-                    logger.info(f"Dish '{dish_name_en_query}' (matched to '{name_en_to_use}') found in portal {portal_id}.")
+                        first_valid_match_details = valid_matches[0].get("dish_details", {})
+                        name_en_to_use = _get_english_name(first_valid_match_details.get("name"), dish_name_en_query)
+                        price_en = first_valid_match_details.get("price")
+
+                        # Universal cleaning for all option group names before sending to AI
+                        raw_option_groups = first_valid_match_details.get("optionGroups")
+                        if raw_option_groups is None:
+                            raw_option_groups = []
+
+                        for group in raw_option_groups:
+                            if group.get("name") and group.get("name", {}).get("en"):
+                                group["name"]["en"] = clean_text_for_tts(group["name"]["en"])
+
+                        # If the item has no required options and is not a combo, add it directly to the cart.
+                        has_required_options = any(group.get("isRequired") for group in raw_option_groups)
+                        name_lower = name_en_to_use.lower()
+
+                        if not has_required_options:
+                            quantity = input_data.get("quantity", 1)
+                            order_manager.add_item_to_cart(call_sid, name_en_to_use, quantity, {})
+                            output_payload["added_to_cart"] = True
+                            output_payload["tool_to_use"] = None
+                            output_payload["message_for_agent"] = f"Okay, I've added {quantity} {name_en_to_use} to your order. What else can I get for you?"
+                        # Check if the item is one of the special combos that needs the combo manager
+                        elif "customized combo" in name_lower or "combo #1" in name_lower or "combo #2" in name_lower or "combo #3" in name_lower or "family combo" in name_lower:
+                            live_menu_response = await get_extracted_dishes(portal_id)
+                            live_menu_data = live_menu_response.get("data", [])
+                            response_from_manager = combo_order_manager.start_combo_order(name_en_to_use, call_sid, live_menu_data)
+                            output_payload["message_for_agent"] = response_from_manager.get("message_for_agent")
+                            output_payload["tool_to_use"] = "handle_combo_item_selection"
+                            await set_next_tool(call_sid, "handle_combo_item_selection")
+                        else:
+                            # For all other items with options, use the generic manager
+                            quantity = input_data.get("quantity", 1)
+                            response_from_manager = order_manager.start_item(first_valid_match_details, quantity, call_sid)
+                            output_payload["message_for_agent"] = response_from_manager.get("message_for_agent")
+                            output_payload["tool_to_use"] = "handle_standard_item_selection"
+
+                        output_payload["found"] = True
+                        output_payload["message_for_agent"] = clean_text_for_tts(output_payload["message_for_agent"])
+                        logger.info(f"Dish '{dish_name_en_query}' (matched to '{name_en_to_use}') found in portal {portal_id}.")
                 else:
                     logger.info(f"Dish '{dish_name_en_query}' found in POS, but no valid English or fallback name available. Treating as not found.")
                     output_payload["message_for_agent"] = f"Sorry, I couldn't find an entry for '{dish_name_en_query}' on the menu."
@@ -527,9 +582,82 @@ async def handle_standard_item_selection(
 ):
     """
     Handles the user's selection for a standard item's options using the generic OrderManager.
+    Also handles ambiguity resolution when multiple menu items match.
     """
     user_input = input_data.get("user_input")
     logger.info(f"Handling {function_name} with user_input '{user_input}' for a standard item (CallSid: {call_sid})")
+
+    # Check for pending ambiguous selection FIRST
+    if order_manager.has_pending_ambiguous(call_sid):
+        logger.info(f"Resolving ambiguous menu selection for call_sid: {call_sid}")
+        resolution_result = order_manager.resolve_ambiguous(call_sid, user_input)
+        
+        if resolution_result["status"] == "REPROMPT":
+            # User's input didn't match any option clearly
+            response_payload = {
+                "status": "REPROMPT",
+                "message_for_agent": resolution_result["message_for_agent"]
+            }
+        elif resolution_result["status"] == "SUCCESS":
+            # Successfully resolved - now process the selected dish
+            selected_dish = resolution_result["selected_dish"]
+            selected_name = resolution_result["selected_name"]
+            quantity = resolution_result["quantity"]
+            
+            dish_details = selected_dish.get("dish_details") or {}
+            
+            # Validate dish_details
+            if not dish_details:
+                logger.error(f"Missing dish_details for selected item '{selected_name}' for call {call_sid}")
+                response_payload = {
+                    "status": "ERROR",
+                    "message_for_agent": f"Sorry, there was an error retrieving the details for {selected_name}. Please try again."
+                }
+                cleaned_response_payload = clean_response_for_tts(response_payload)
+                response = {
+                    "type": "FunctionCallResponse",
+                    "id": function_call_id,
+                    "name": function_name,
+                    "content": json.dumps(cleaned_response_payload)
+                }
+                await deepgram_service.send_json(response)
+                logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}) - error: missing dish_details")
+                return
+            
+            # Check if item has required options
+            option_groups = dish_details.get("optionGroups") or []
+            has_required_options = any(group.get("isRequired") for group in option_groups)
+            
+            if not has_required_options:
+                # No options needed - add directly to cart
+                order_manager.add_item_to_cart(call_sid, selected_name, quantity, {})
+                response_payload = {
+                    "status": "ITEM_COMPLETE",
+                    "message_for_agent": f"Okay, I've added {quantity} {selected_name} to your order. What else can I get for you?",
+                    "current_cart": order_manager.get_cart(call_sid)
+                }
+            else:
+                # Has options - start configuration
+                response_from_manager = order_manager.start_item(dish_details, quantity, call_sid)
+                response_payload = response_from_manager
+        else:
+            # ERROR case
+            response_payload = {
+                "status": "ERROR",
+                "message_for_agent": resolution_result.get("message_for_agent", "Sorry, there was an error processing your selection.")
+            }
+        
+        # Clean and send the response
+        cleaned_response_payload = clean_response_for_tts(response_payload)
+        response = {
+            "type": "FunctionCallResponse",
+            "id": function_call_id,
+            "name": function_name,
+            "content": json.dumps(cleaned_response_payload)
+        }
+        await deepgram_service.send_json(response)
+        logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}) - ambiguity resolved")
+        return
 
     # Defense-in-depth: Check if there's an active combo that should handle this instead
     if combo_order_manager.is_active(call_sid):
@@ -565,6 +693,9 @@ async def handle_standard_item_selection(
         # Ensure the AI gets the updated cart to prevent stale summaries.
         if response_payload.get("status") == "ITEM_COMPLETE":
             response_payload["current_cart"] = order_manager.get_cart(call_sid)
+            # Clear any state override since the item is complete
+            await clear_next_tool(call_sid)
+            logger.info(f"Cleared state override after standard item completion for call {call_sid}")
         # --- END OF FIX ---
 
     # Clean the response payload before sending
@@ -934,6 +1065,207 @@ async def handle_send_menu_link(
 
 # The handle_send_combo_menu_sms function is now obsolete and has been removed.
 # The _incorrectly_named_handle_order_summary_actually_list_dishes function is removed.
+
+# async def handle_remove_cart_item(
+#     function_call_id: str,
+#     function_name: str,
+#     input_data: Dict[str, Any],
+#     deepgram_service,
+#     call_sid: Optional[str]
+# ):
+#     """Handles removing an item from the cart."""
+#     item_identifier = input_data.get("item_identifier", "").strip()
+    
+#     if not item_identifier:
+#         response = {
+#             "type": "FunctionCallResponse",
+#             "id": function_call_id,
+#             "name": function_name,
+#             "content": "I'm sorry, I didn't catch which item you want to remove. Could you specify?"
+#         }
+#         await deepgram_service.send_json(response)
+#         return
+    
+#     # Handle "last" as shorthand for most recent item
+#     if item_identifier.lower() == "last":
+#         cart = order_manager.get_cart(call_sid)
+#         if cart:
+#             item_identifier = str(len(cart) - 1)  # Use index of last item
+#         else:
+#             response = {
+#                 "type": "FunctionCallResponse",
+#                 "id": function_call_id,
+#                 "name": function_name,
+#                 "content": "Your cart is empty, there's nothing to remove."
+#             }
+#             await deepgram_service.send_json(response)
+#             return
+    
+#     result = order_manager.remove_from_cart(call_sid, item_identifier)
+    
+#     response = {
+#         "type": "FunctionCallResponse",
+#         "id": function_call_id,
+#         "name": function_name,
+#         "content": result.get("message_for_agent", "Item removed.")
+#     }
+#     await deepgram_service.send_json(response)
+#     logger.info(f"Remove cart item result for {call_sid}: {result['status']}")
+
+
+# async def handle_update_cart_quantity(
+#     function_call_id: str,
+#     function_name: str,
+#     input_data: Dict[str, Any],
+#     deepgram_service,
+#     call_sid: Optional[str]
+# ):
+#     """Handles updating the quantity of a cart item."""
+#     item_identifier = input_data.get("item_identifier", "").strip()
+#     new_quantity = input_data.get("new_quantity")
+    
+#     if not item_identifier or new_quantity is None:
+#         response = {
+#             "type": "FunctionCallResponse",
+#             "id": function_call_id,
+#             "name": function_name,
+#             "content": "I need to know which item and what quantity. Could you clarify?"
+#         }
+#         await deepgram_service.send_json(response)
+#         return
+    
+#     # Handle "last" shorthand
+#     if item_identifier.lower() == "last":
+#         cart = order_manager.get_cart(call_sid)
+#         if cart:
+#             item_identifier = str(len(cart) - 1)
+#         else:
+#             response = {
+#                 "type": "FunctionCallResponse",
+#                 "id": function_call_id,
+#                 "name": function_name,
+#                 "content": "Your cart is empty."
+#             }
+#             await deepgram_service.send_json(response)
+#             return
+    
+#     result = order_manager.update_quantity(call_sid, item_identifier, new_quantity)
+    
+#     response = {
+#         "type": "FunctionCallResponse",
+#         "id": function_call_id,
+#         "name": function_name,
+#         "content": result.get("message_for_agent", "Quantity updated.")
+#     }
+#     await deepgram_service.send_json(response)
+#     logger.info(f"Update quantity result for {call_sid}: {result['status']}")
+
+
+# async def handle_edit_cart_item(
+#     function_call_id: str,
+#     function_name: str,
+#     input_data: Dict[str, Any],
+#     deepgram_service,
+#     call_sid: Optional[str],
+#     portal_id: str
+# ):
+#     """Handles editing a cart item by restarting its configuration."""
+#     item_identifier = input_data.get("item_identifier", "").strip()
+    
+#     if not item_identifier:
+#         response = {
+#             "type": "FunctionCallResponse",
+#             "id": function_call_id,
+#             "name": function_name,
+#             "content": "Which item would you like to edit?"
+#         }
+#         await deepgram_service.send_json(response)
+#         return
+    
+#     # Handle "last" shorthand
+#     if item_identifier.lower() == "last":
+#         cart = order_manager.get_cart(call_sid)
+#         if cart:
+#             item_identifier = str(len(cart) - 1)
+#         else:
+#             response = {
+#                 "type": "FunctionCallResponse",
+#                 "id": function_call_id,
+#                 "name": function_name,
+#                 "content": "Your cart is empty."
+#             }
+#             await deepgram_service.send_json(response)
+#             return
+    
+#     result = order_manager.edit_cart_item(call_sid, item_identifier)
+    
+#     if result["status"] != "SUCCESS":
+#         response = {
+#             "type": "FunctionCallResponse",
+#             "id": function_call_id,
+#             "name": function_name,
+#             "content": result.get("message_for_agent", "Couldn't find that item.")
+#         }
+#         await deepgram_service.send_json(response)
+#         return
+    
+#     # Fetch dish details from menu to restart configuration
+#     item_to_reconfigure = result["item_to_reconfigure"]
+#     dish_name = item_to_reconfigure["name"]
+#     quantity = result["original_quantity"]
+    
+#     found_dishes = await find_dish_by_english_name(portal_id, dish_name)
+    
+#     if not found_dishes:
+#         response = {
+#             "type": "FunctionCallResponse",
+#             "id": function_call_id,
+#             "name": function_name,
+#             "content": f"I'm sorry, I couldn't find '{dish_name}' in the menu. Let's try something else."
+#         }
+#         await deepgram_service.send_json(response)
+#         return
+    
+#     dish_details = found_dishes[0].get("dish_details", {})
+    
+#     # Check if combo or standard item and route appropriately
+#     if "combo" in dish_name.lower():
+#         live_menu_response = await get_extracted_dishes(portal_id)
+#         live_menu_data = live_menu_response.get("data", [])
+#         restart_response = combo_order_manager.start_combo_order(dish_name, call_sid, live_menu_data)
+#         message = result["message_for_agent"] + " " + restart_response.get("message_for_agent", "")
+#     else:
+#         restart_response = order_manager.start_item(dish_details, quantity, call_sid)
+#         message = result["message_for_agent"] + " " + restart_response.get("message_for_agent", "")
+    
+#     response = {
+#         "type": "FunctionCallResponse",
+#         "id": function_call_id,
+#         "name": function_name,
+#         "content": message
+#     }
+#     await deepgram_service.send_json(response)
+#     logger.info(f"Edit cart item: restarted configuration for '{dish_name}'")
+
+
+# async def handle_view_cart(
+#     function_call_id: str,
+#     function_name: str,
+#     deepgram_service,
+#     call_sid: Optional[str]
+# ):
+#     """Handles viewing the cart contents."""
+#     summary = order_manager.get_cart_summary(call_sid)
+    
+#     response = {
+#         "type": "FunctionCallResponse",
+#         "id": function_call_id,
+#         "name": function_name,
+#         "content": summary["summary_text"]
+#     }
+#     await deepgram_service.send_json(response)
+#     logger.info(f"View cart for {call_sid}: {summary['item_count']} items")
+
 
 async def handle_finalize_current_item(
     function_call_id: str,

@@ -32,7 +32,11 @@ from app.handlers.common_tool_defs import (
     CHECK_MENU_ITEM_TOOL_SCHEMA_EN_OPENAI,
     SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI,
     PROCESS_ORDER_SELECTION_TOOL_SCHEMA,
-    PROCESS_COMBO_SELECTION_TOOL_SCHEMA
+    PROCESS_COMBO_SELECTION_TOOL_SCHEMA,
+    # REMOVE_CART_ITEM_TOOL_SCHEMA,
+    # UPDATE_CART_QUANTITY_TOOL_SCHEMA,
+    # EDIT_CART_ITEM_TOOL_SCHEMA,
+    # VIEW_CART_TOOL_SCHEMA
 )
 
 # Configure logging
@@ -67,7 +71,11 @@ class DeepgramEnglishAudioHandler():
             CHECK_MENU_ITEM_TOOL_SCHEMA_EN_OPENAI,
             SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI,
             PROCESS_ORDER_SELECTION_TOOL_SCHEMA,
-            PROCESS_COMBO_SELECTION_TOOL_SCHEMA
+            PROCESS_COMBO_SELECTION_TOOL_SCHEMA,
+            # REMOVE_CART_ITEM_TOOL_SCHEMA,
+            # UPDATE_CART_QUANTITY_TOOL_SCHEMA,
+            # EDIT_CART_ITEM_TOOL_SCHEMA,
+            # VIEW_CART_TOOL_SCHEMA
         ]
         
         # Initialize caller information
@@ -630,11 +638,26 @@ class DeepgramEnglishAudioHandler():
                             logger.info(f"Redirected incorrect 'order_summary' call after finalizing combo for call {self.call_sid}.")
                             return  # Stop execution to prevent placing the order.
 
-                    # State override logic
-                    next_tool_override = await get_and_clear_next_tool(self.call_sid)
-                    if next_tool_override:
-                        logger.info(f"STATE OVERRIDE: Forcing use of tool '{next_tool_override}' instead of agent-selected '{function_name}' for call {self.call_sid}")
-                        reformatted_function_request["function_name"] = next_tool_override
+                    # State override logic - but EXEMPT cart modification tools
+                    # Cart tools should always execute regardless of state override
+                    # CART_MODIFICATION_TOOLS = {
+                    #     "remove_cart_item",
+                    #     "update_cart_quantity", 
+                    #     "edit_cart_item",
+                    #     "view_cart"
+                    # }
+                    
+                    # if function_name in CART_MODIFICATION_TOOLS:
+                    if False: # Temporarily disable this block
+                        logger.info(f"CART TOOL EXEMPTION: '{function_name}' bypasses state override for call {self.call_sid}")
+                        # Clear any existing state override since we're handling a cart operation
+                        await clear_next_tool(self.call_sid)
+                    else:
+                        # Apply state override for non-cart tools
+                        next_tool_override = await get_and_clear_next_tool(self.call_sid)
+                        if next_tool_override:
+                            logger.info(f"STATE OVERRIDE: Forcing use of tool '{next_tool_override}' instead of agent-selected '{function_name}' for call {self.call_sid}")
+                            reformatted_function_request["function_name"] = next_tool_override
                     
                     await handle_function_call(
                         reformatted_function_request,
