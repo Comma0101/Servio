@@ -290,7 +290,7 @@ FINALIZE_CURRENT_ITEM_TOOL_SCHEMA: Dict[str, Any] = {
 
 PLACE_ORDER_TOOL_SCHEMA: Dict[str, Any] = {
     "name": "place_order",
-    "description": "Places the entire order with the restaurant's POS system. Call this tool ONLY when the customer explicitly states they are finished ordering (e.g., 'that's all', 'I'm done', 'place the order', 'checkout'). DO NOT call this tool if the user says 'remove', 'delete', 'cancel', 'take out', 'change', 'edit', or asks questions about their order. This is ONLY for finalizing and submitting the order.",
+    "description": "Submits the final order to the POS system. Use ONLY when the customer confirms they are finished ordering (e.g., 'that's all', 'place the order').",
     "parameters": {
         "type": "object",
         "properties": {},
@@ -338,7 +338,7 @@ ORDER_SUMMARY_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
 
 CHECK_MENU_ITEM_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
     "name": "check_menu_item_english",
-    "description": "CRITICAL: Use this tool ONLY when a customer wants to ADD a new item to their order. Keywords for adding: 'I want', 'add', 'get me', 'order'. DO NOT use this tool if the user says 'remove', 'delete', 'take out', 'take off', 'cancel', 'I don't want', 'change', 'edit', 'modify', or 'update'. For those actions, you MUST use remove_cart_item, edit_cart_item, or update_cart_quantity instead.",
+    "description": "Use to add a new item to the order. Triggered by keywords like 'I want' or 'add'. Do not use for removing or editing existing items.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -408,7 +408,7 @@ SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI: Dict[str, Any] = {
 
 PROCESS_ORDER_SELECTION_TOOL_SCHEMA: Dict[str, Any] = {
     "name": "handle_standard_item_selection",
-    "description": "CRITICAL: Use this tool ONLY for configuring NEW items during the ordering process (e.g., selecting flavor, spice level, size). DO NOT use this tool for cart modifications (remove, edit, quantity changes) - use the specific cart tools instead. DO NOT use for 'Customized Combo' orders.",
+    "description": "Processes user's choices (e.g., flavor, size) when configuring a standard menu item.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -463,20 +463,20 @@ PROCESS_COMBO_SELECTION_TOOL_SCHEMA: Dict[str, Any] = {
 
 # --- Cart Modification Tool Schemas ---
 
-# REMOVE_CART_ITEM_TOOL_SCHEMA: Dict[str, Any] = {
-#     "name": "remove_cart_item",
-#     "description": "CRITICAL - CART REMOVAL TOOL: This is the ONLY tool for removing items from the cart. Use this tool IMMEDIATELY if the customer says ANY of these words: 'remove', 'delete', 'take out', 'take off', 'take that off', 'cancel', 'I don't want', 'get rid of', 'nevermind', or refers to removing 'that', 'it', or 'the last item'. DO NOT use place_order, check_menu_item, or ANY other tool when the user wants to remove something. Examples that MUST use this tool: 'remove the oyster', 'can you remove that?', 'delete it', 'take that off', 'I don't want it anymore'.",
-#     "parameters": {
-#         "type": "object",
-#         "properties": {
-#             "item_identifier": {
-#                 "type": "string",
-#                 "description": "The name of the item to remove (e.g., 'oyster', 'combo'). Use 'last' if they say 'that', 'it', or 'the last one'."
-#             }
-#         },
-#         "required": ["item_identifier"]
-#     }
-# }
+REMOVE_CART_ITEM_TOOL_SCHEMA: Dict[str, Any] = {
+    "name": "remove_cart_item",
+    "description": "CRITICAL - CART REMOVAL TOOL: This is the ONLY tool for removing items from the cart. Use this tool IMMEDIATELY if the customer says ANY of these words: 'remove', 'delete', 'take out', 'take off', 'take that off', 'cancel', 'I don't want', 'get rid of', 'nevermind', or refers to removing 'that', 'it', or 'the last item'. DO NOT use place_order, check_menu_item, or ANY other tool when the user wants to remove something. Examples that MUST use this tool: 'remove the oyster', 'can you remove that?', 'delete it', 'take that off', 'I don't want it anymore'.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "item_identifier": {
+                "type": "string",
+                "description": "The name of the item to remove (e.g., 'oyster', 'combo'). Use 'last' if they say 'that', 'it', or 'the last one'."
+            }
+        },
+        "required": ["item_identifier"]
+    }
+}
 
 # UPDATE_CART_QUANTITY_TOOL_SCHEMA: Dict[str, Any] = {
 #     "name": "update_cart_quantity",

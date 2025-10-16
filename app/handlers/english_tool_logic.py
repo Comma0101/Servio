@@ -365,14 +365,14 @@ async def handle_function_call(
                 deepgram_service,
                 call_sid
             )
-        # elif function_name == "remove_cart_item":
-        #     await handle_remove_cart_item(
-        #         function_call_id,
-        #         function_name,
-        #         input_data,
-        #         deepgram_service,
-        #         call_sid
-        #     )
+        elif function_name == "remove_cart_item":
+            await handle_remove_cart_item(
+                function_call_id,
+                function_name,
+                input_data,
+                deepgram_service,
+                call_sid
+            )
         # elif function_name == "update_cart_quantity":
         #     await handle_update_cart_quantity(
         #         function_call_id,
@@ -1066,51 +1066,70 @@ async def handle_send_menu_link(
 # The handle_send_combo_menu_sms function is now obsolete and has been removed.
 # The _incorrectly_named_handle_order_summary_actually_list_dishes function is removed.
 
-# async def handle_remove_cart_item(
-#     function_call_id: str,
-#     function_name: str,
-#     input_data: Dict[str, Any],
-#     deepgram_service,
-#     call_sid: Optional[str]
-# ):
-#     """Handles removing an item from the cart."""
-#     item_identifier = input_data.get("item_identifier", "").strip()
+async def handle_remove_cart_item(
+    function_call_id: str,
+    function_name: str,
+    input_data: Dict[str, Any],
+    deepgram_service,
+    call_sid: Optional[str]
+):
+    """Handles removing an item from the cart and returns an updated summary."""
+    item_identifier = input_data.get("item_identifier", "").strip()
     
-#     if not item_identifier:
-#         response = {
-#             "type": "FunctionCallResponse",
-#             "id": function_call_id,
-#             "name": function_name,
-#             "content": "I'm sorry, I didn't catch which item you want to remove. Could you specify?"
-#         }
-#         await deepgram_service.send_json(response)
-#         return
+    if not item_identifier:
+        response_content = {
+            "status": "REPROMPT",
+            "message_for_agent": "I'm sorry, I didn't catch which item you want to remove. Could you specify?",
+            "current_cart": order_manager.get_cart(call_sid)
+        }
+        response = {
+            "type": "FunctionCallResponse",
+            "id": function_call_id,
+            "name": function_name,
+            "content": json.dumps(response_content)
+        }
+        await deepgram_service.send_json(response)
+        return
     
-#     # Handle "last" as shorthand for most recent item
-#     if item_identifier.lower() == "last":
-#         cart = order_manager.get_cart(call_sid)
-#         if cart:
-#             item_identifier = str(len(cart) - 1)  # Use index of last item
-#         else:
-#             response = {
-#                 "type": "FunctionCallResponse",
-#                 "id": function_call_id,
-#                 "name": function_name,
-#                 "content": "Your cart is empty, there's nothing to remove."
-#             }
-#             await deepgram_service.send_json(response)
-#             return
+    # Handle "last" as shorthand for most recent item
+    if item_identifier.lower() == "last":
+        cart = order_manager.get_cart(call_sid)
+        if cart:
+            item_identifier = str(len(cart) - 1)  # Use index of last item
+        else:
+            response_content = {
+                "status": "EMPTY_CART",
+                "message_for_agent": "Your cart is empty, there's nothing to remove.",
+                "current_cart": []
+            }
+            response = {
+                "type": "FunctionCallResponse",
+                "id": function_call_id,
+                "name": function_name,
+                "content": json.dumps(response_content)
+            }
+            await deepgram_service.send_json(response)
+            return
     
-#     result = order_manager.remove_from_cart(call_sid, item_identifier)
+    result = order_manager.remove_from_cart(call_sid, item_identifier)
     
-#     response = {
-#         "type": "FunctionCallResponse",
-#         "id": function_call_id,
-#         "name": function_name,
-#         "content": result.get("message_for_agent", "Item removed.")
-#     }
-#     await deepgram_service.send_json(response)
-#     logger.info(f"Remove cart item result for {call_sid}: {result['status']}")
+    # After removal, get the updated cart to send back to the agent
+    updated_cart = order_manager.get_cart(call_sid)
+    
+    response_content = {
+        "status": result["status"],
+        "message_for_agent": result.get("message_for_agent", "Item removed."),
+        "current_cart": updated_cart
+    }
+    
+    response = {
+        "type": "FunctionCallResponse",
+        "id": function_call_id,
+        "name": function_name,
+        "content": json.dumps(response_content)
+    }
+    await deepgram_service.send_json(response)
+    logger.info(f"Remove cart item result for {call_sid}: {result['status']}")
 
 
 # async def handle_update_cart_quantity(

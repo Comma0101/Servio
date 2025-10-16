@@ -333,8 +333,11 @@ class DeepgramService:
                         elif "function" in message.lower():
                             logger.info(f"Message contains 'function' but type is {msg_type}: {message[:200]}")
                         
-                        # Log ALL message types for debugging
-                        logger.info(f"DEEPGRAM MESSAGE CONTENT: {message[:200]}...")
+                        # Log ALL message types for debugging, with full content for warnings
+                        if msg_type == "Warning":
+                            logger.info(f"DEEPGRAM MESSAGE CONTENT: {message}")
+                        else:
+                            logger.info(f"DEEPGRAM MESSAGE CONTENT: {message[:200]}...")
                         
                         logger.debug(f"Deepgram message details: {message}")
                         

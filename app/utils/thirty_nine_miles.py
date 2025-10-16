@@ -25,33 +25,52 @@ CACHE_DURATION_HOURS = 24
 
 # --- Pydantic Models for Order Creation ---
 
-def _normalize_combo_query(query: str) -> str:
+def _normalize_search_query(query: str) -> str:
     """
-    Normalizes different ways of saying a numbered item into a standard format.
-    e.g., "combo number two", "lunch special one" -> "COMBO #2", "LUNCH SPECIAL #1"
+    Normalizes a search query for more robust matching.
+    - Converts number words to digits.
+    - Standardizes units (e.g., "piece" to "pc").
+    - Removes special characters.
+    - Normalizes combo-related phrasing.
     """
-    # This regex looks for any phrase, an optional "number" or "#", and a number word/digit at the end.
-    match = re.search(r'(.+?)\s*(?:number|#)?\s*(\w+)$', query, re.IGNORECASE)
-    if not match:
-        return query
+    query = query.lower()
 
-    phrase = match.group(1).strip()
-    number_str = match.group(2)
-    
-    number_map = {
+    # Normalize combo-related phrasing first
+    combo_match = re.search(r'(.+?)\s*(?:number|#)?\s*(\w+)$', query, re.IGNORECASE)
+    if combo_match:
+        phrase = combo_match.group(1).strip()
+        number_str = combo_match.group(2)
+        number_map = {
+            "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+            "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10"
+        }
+        if number_str.lower() in number_map or number_str.isdigit():
+            digit = number_map.get(number_str.lower(), number_str)
+            query = f"{phrase} #{digit}"
+
+    # General number word to digit conversion
+    number_words = {
         "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
-        "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10"
+        "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
+        "twelve": "12"
     }
-    
-    # Verify the last word is a number before normalizing.
-    if number_str.lower() not in number_map and not number_str.isdigit():
-        return query
+    for word, digit in number_words.items():
+        query = re.sub(r'\b' + word + r'\b', digit, query)
 
-    digit = number_map.get(number_str.lower(), number_str)
+    # Standardize units
+    unit_map = {
+        r'pieces?': 'pc',
+        r'pcs': 'pc'
+    }
+    for pattern, replacement in unit_map.items():
+        query = re.sub(pattern, replacement, query)
+
+    # Remove special characters and extra whitespace
+    query = re.sub(r'[^\w\s#]', '', query)
+    query = ' '.join(query.split())
     
-    normalized_query = f"{phrase.upper()} #{digit}"
-    logger.info(f"Normalized combo query '{query}' to '{normalized_query}'.")
-    return normalized_query
+    logger.info(f"Normalized search query to '{query}'.")
+    return query
 
 class TextStore(BaseModel):
     en: Optional[str] = None
@@ -183,13 +202,15 @@ async def _get_raw_detailed_menu(portal_id: str) -> List[Dict[str, Any]]:
 
 async def _find_dish(portal_id: str, name_to_find: str, language: Literal['en', 'zh']) -> List[Dict[str, Any]]:
     """
-    Generic internal function to find a dish by its name in the specified language.
-    Performs an exact match first, then a 'contains' match.
+    Finds a dish by its name using a multi-stage search process for accuracy.
     """
-    # --- START: NEW NORMALIZATION AND SEARCH LOGIC ---
     original_query = name_to_find
+    
+    # Use the new comprehensive normalization for English queries
     if language == 'en':
-        name_to_find = _normalize_combo_query(name_to_find)
+        normalized_search_term = _normalize_search_query(name_to_find)
+    else:
+        normalized_search_term = name_to_find.lower()
 
     menu_response = await get_extracted_dishes(portal_id)
     if not (menu_response and menu_response.get("success")):
@@ -197,26 +218,53 @@ async def _find_dish(portal_id: str, name_to_find: str, language: Literal['en', 
         return []
 
     all_dishes = menu_response.get("data", [])
-    search_term_lower = name_to_find.lower()
     name_key = f"dish_name_{language}"
 
-    # 1. Exact match (case-insensitive for English)
+    # --- Step 1: Exact Match on Normalized Names ---
+    exact_matches = []
     for dish in all_dishes:
         dish_name = dish.get(name_key, "")
-        # Normalize whitespace to handle data entry errors like double spaces
-        normalized_dish_name = " ".join(dish_name.lower().split())
-        normalized_search_term = " ".join(search_term_lower.split())
+        # Normalize the menu item name using the same logic as the query
+        normalized_dish_name = _normalize_search_query(dish_name) if language == 'en' else dish_name.lower()
+        
+        if normalized_dish_name == normalized_search_term:
+            exact_matches.append(dish)
+    
+    if exact_matches:
+        logger.info(f"Found {len(exact_matches)} exact normalized {language} match(es) for '{name_to_find}'.")
+        return exact_matches
 
-        if (language == 'en' and normalized_dish_name == normalized_search_term) or \
-           (language == 'zh' and dish_name == name_to_find):
-            logger.info(f"Found exact {language} match for '{name_to_find}'.")
-            return [dish]
+    # --- Step 2: "All Words" Match on Normalized Names ---
+    query_words = set(normalized_search_term.split())
+    if len(query_words) > 1:
+        all_words_matches = []
+        for dish in all_dishes:
+            dish_name = dish.get(name_key, "")
+            normalized_dish_name = _normalize_search_query(dish_name) if language == 'en' else dish_name.lower()
+            if all(word in normalized_dish_name for word in query_words):
+                all_words_matches.append(dish)
+        
+        if all_words_matches:
+            logger.info(f"Found {len(all_words_matches)} 'all words' normalized match(es) for '{name_to_find}'.")
+            return all_words_matches
 
-    # 2. If no exact match, fall back to a general fuzzy match for English queries.
+    # --- Step 3: Phrase "Contains" Match on Normalized Names ---
+    contains_matches = []
+    for dish in all_dishes:
+        dish_name = dish.get(name_key, "")
+        normalized_dish_name = _normalize_search_query(dish_name) if language == 'en' else dish_name.lower()
+        if normalized_search_term in normalized_dish_name:
+            contains_matches.append(dish)
+            
+    if contains_matches:
+        logger.info(f"Found {len(contains_matches)} 'contains' phrase match(es) on normalized names for '{name_to_find}'.")
+        return contains_matches[:4]
+
+    # --- Step 4: General Fuzzy Match (as a fallback) ---
     if language == 'en':
         all_dish_names = [dish.get(name_key, "") for dish in all_dishes]
-        # Use extract() to get ALL matches above threshold, not just the best one
-        matches = process.extract(original_query, all_dish_names, limit=None)
+        # Use extract() to get ALL matches above a reasonable threshold
+        matches = process.extract(original_query, all_dish_names, limit=5) # Limit to top 5 fuzzy
         good_matches = [(name, score) for name, score in matches if score > 80]
         
         if good_matches:
@@ -224,51 +272,12 @@ async def _find_dish(portal_id: str, name_to_find: str, language: Literal['en', 
             matched_dishes = [dish for dish in all_dishes 
                             if dish.get(name_key, "") in [m[0] for m in good_matches]]
             if matched_dishes:
-                # Log all matches found
-                match_names = [dish.get(name_key, "") for dish in matched_dishes]
                 scores_str = ", ".join([f"'{m[0]}' (score: {m[1]})" for m in good_matches])
                 logger.info(f"Found {len(matched_dishes)} general fuzzy match(es) for '{original_query}': {scores_str}")
-                return matched_dishes  # Return all matches for ambiguity handling
+                return matched_dishes
 
-    # 3. If still no match, fall back to fuzzy matching specifically for combos
-    if "combo" in search_term_lower and language == 'en':
-        combo_dishes = [dish for dish in all_dishes if dish.get("is_combo")]
-        if combo_dishes:
-            combo_names = [dish.get(name_key, "") for dish in combo_dishes]
-            # Use the original, un-normalized query for fuzzy matching
-            best_match_name, score = process.extractOne(original_query, combo_names)
-            if score > 80: # Confidence threshold
-                best_match_dish = next((dish for dish in combo_dishes if dish.get(name_key, "") == best_match_name), None)
-                if best_match_dish:
-                    logger.info(f"Found combo match for '{original_query}' with score {score}. Best match: '{best_match_name}'")
-                    return [best_match_dish]
-
-    # 4. "Contains" match (case-insensitive for English)
-    contains_matches = [
-        dish for dish in all_dishes
-        if (language == 'en' and search_term_lower in dish.get(name_key, "").lower()) or \
-           (language == 'zh' and name_to_find in dish.get(name_key, ""))
-    ]
-
-    # 4. Search within combo options if no direct matches are found
-    # if not contains_matches and language == 'en':
-    #     for dish in all_dishes:
-    #         if dish.get("is_combo"):
-    #             for group in dish.get("dish_details", {}).get("optionGroups", []):
-    #                 for option in group.get("options", []):
-    #                     name_info = option.get("name") or {}
-    #                     option_name = (name_info.get("en") or name_info.get("zh") or "").lower()
-    #                     if search_term_lower in option_name:
-    #                         logger.info(f"Found '{name_to_find}' as an option in combo '{dish.get(name_key)}'.")
-    #                         # Return the parent combo dish
-    #                         return [dish]
-
-    if not contains_matches:
-        logger.info(f"No {language} match found for '{name_to_find}'.")
-        return []
-
-    logger.info(f"Found {len(contains_matches)} 'contains' {language} match(es) for '{name_to_find}'.")
-    return contains_matches[:4]
+    logger.info(f"No high-confidence {language} match found for '{name_to_find}'.")
+    return []
 
 def _patch_menu_with_local_overrides(
     live_menu: List[Dict[str, Any]], portal_id: str

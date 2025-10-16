@@ -25,7 +25,8 @@ from app.handlers.common_tool_defs import (
     CHECK_MENU_ITEM_TOOL_SCHEMA_EN_OPENAI,
     SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI,
     PROCESS_ORDER_SELECTION_TOOL_SCHEMA,
-    PROCESS_COMBO_SELECTION_TOOL_SCHEMA
+    PROCESS_COMBO_SELECTION_TOOL_SCHEMA,
+    REMOVE_CART_ITEM_TOOL_SCHEMA
 )
 try:
     from google.cloud import texttospeech_v1 as texttospeech
@@ -549,7 +550,8 @@ async def handle_media_stream(websocket: WebSocket):
             CHECK_MENU_ITEM_TOOL_SCHEMA_EN_OPENAI,
             SEND_MENU_LINK_TOOL_SCHEMA_EN_OPENAI,
             PROCESS_ORDER_SELECTION_TOOL_SCHEMA,
-            PROCESS_COMBO_SELECTION_TOOL_SCHEMA
+            PROCESS_COMBO_SELECTION_TOOL_SCHEMA,
+            REMOVE_CART_ITEM_TOOL_SCHEMA
         ]
         
         # Initialize based on language
@@ -584,8 +586,8 @@ async def handle_media_stream(websocket: WebSocket):
                 },
                 "think": {
                     "provider": { 
-                        "type": "open_ai",
-                        "model": "gpt-4o-mini" 
+                        "type": "google",
+                        "model": "gemini-2.5-flash-lite" 
                     },
                     "prompt": enhanced_system_message, # Changed from "instructions" to "prompt" per V1 guide
                     "functions": all_english_function_definitions

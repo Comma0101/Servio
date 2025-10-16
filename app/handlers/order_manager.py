@@ -277,8 +277,12 @@ class OrderManager:
                         "quantity": quantity
                     }
         
-        # Reprompt if we couldn't understand
-        options_str = ", ".join([f"{i+1}. {name}" for i, name in enumerate(ambiguous_matches)])
+        # Reprompt if we couldn't understand - use natural language format
+        if len(ambiguous_matches) == 2:
+            options_str = f"{ambiguous_matches[0]} or {ambiguous_matches[1]}"
+        else:
+            options_str = ", ".join(ambiguous_matches[:-1]) + f", or {ambiguous_matches[-1]}"
+        
         return {
             "status": "REPROMPT",
             "message_for_agent": f"I'm sorry, I didn't catch that. Which one would you like? {options_str}"
