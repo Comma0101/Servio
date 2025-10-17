@@ -3,6 +3,7 @@ from typing import Dict, Any, Optional, List
 import json
 import re
 from thefuzz import process
+from app.utils.text_normalization import normalize_for_matching, normalize_options_for_matching
 
 logger = logging.getLogger(__name__)
 
@@ -623,28 +624,32 @@ class ComboOrderManager:
                 order["current_step"] += 1
                 return self.get_next_question(call_sid)
 
-        # Custom logic to handle menu inconsistencies
-        cleaned_input = user_input
-
         # Get the raw option names from the menu
         raw_options = [self._get_display_name(opt.get("name", {})) for opt in current_group.get("options", [])]
         
-        # Create a list of cleaned names for matching and TTS
+        # Create a list of cleaned names for TTS display
         cleaned_options = [self._clean_option_name_for_tts(opt) for opt in raw_options if opt]
         
-        # Create a mapping from cleaned name back to the original raw name for saving the order
-        cleaned_to_raw_map = {self._clean_option_name_for_tts(raw_opt): raw_opt for raw_opt in raw_options if raw_opt}
-
-        # Perform fuzzy matching against the CLEANED list for better accuracy
-        best_match_cleaned, score = process.extractOne(cleaned_input, cleaned_options)
+        # Apply normalization for robust fuzzy matching
+        normalized_input = normalize_for_matching(user_input)
+        normalized_options, norm_to_orig_map = normalize_options_for_matching(cleaned_options)
+        
+        # Perform fuzzy matching against the NORMALIZED list for best accuracy
+        best_match_normalized, score = process.extractOne(normalized_input, normalized_options)
         
         if score < 75:
             # Use the CLEANED list for a more natural-sounding reprompt
             options_str = ", ".join(cleaned_options)
             return {
                 "action": "reprompt",
-                "message_for_agent": f"My apologies, {cleaned_input} is not an available option. For {group_name}, your choices are: {options_str}. Which would you like?"
+                "message_for_agent": f"My apologies, {user_input} is not an available option. For {group_name}, your choices are: {options_str}. Which would you like?"
             }
+        
+        # Get the cleaned option name from the normalized match
+        best_match_cleaned = norm_to_orig_map[best_match_normalized]
+        
+        # Create a mapping from cleaned name back to the original raw name for saving the order
+        cleaned_to_raw_map = {self._clean_option_name_for_tts(raw_opt): raw_opt for raw_opt in raw_options if raw_opt}
         
         # Find the original, raw option name from the cleaned match to save to the order
         best_match = cleaned_to_raw_map[best_match_cleaned]

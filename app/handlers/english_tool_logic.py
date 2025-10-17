@@ -74,6 +74,9 @@ def clean_text_for_tts(text: str) -> str:
     Cleans text for more natural TTS output by:
     - Removing formatting characters (asterisks)
     - Converting 'pc' abbreviations to 'piece' or 'pieces'
+    - Expanding 'w/' to 'with' and 'w/o' to 'without'
+    - Removing unnecessary parentheses around expanded phrases
+    - Removing redundant single-unit piece notations
     """
     if not text:
         return ""
@@ -81,14 +84,33 @@ def clean_text_for_tts(text: str) -> str:
     # Remove asterisks and other formatting characters
     text = text.replace("*", "").strip()
     
-    # Convert pc/pcs to piece/pieces for natural speech
-    # Handles formats like: "12pc", "12 pc", "(12pc)", "12pcs"
+    # Expand w/o to without (do this first, before w/)
+    text = re.sub(r'\bw/o\b', 'without', text, flags=re.IGNORECASE)
+    
+    # Expand w/ to with
+    text = re.sub(r'\bw/', 'with ', text, flags=re.IGNORECASE)
+    
+    # Remove parentheses that now only contain "with" or "without" phrases
+    # Example: "(with fries)" -> "with fries"
+    text = re.sub(r'\(\s*(with|without)\s+([^)]+)\)', r'\1 \2', text, flags=re.IGNORECASE)
+    
+    # First, remove single-unit piece notations entirely (they're redundant)
+    # Handles: "(1pc)", "(1 pc)", "(1PC)", "1pc", "1 pc" etc.
+    # Example: "BBQ (1pc)" -> "BBQ"
+    text = re.sub(r'\s*\(?\s*1\s*pcs?\s*\)?', '', text, flags=re.IGNORECASE)
+    
+    # Then, convert multi-unit pc/pcs to piece/pieces for natural speech
+    # Handles formats like: "12pc", "12 pc", "(12pc)", "12pcs", "(6 PCs)"
+    # Example: "Raw Oyster (6 PCs)" -> "Raw Oyster 6 pieces"
     text = re.sub(
         r'\(?(\d+)\s*pcs?\)?',
-        lambda m: f"{m.group(1)} piece" if m.group(1) == '1' else f"{m.group(1)} pieces",
+        lambda m: f"{m.group(1)} pieces",
         text,
         flags=re.IGNORECASE
     )
+    
+    # Clean up any double spaces that may have been created
+    text = re.sub(r'\s+', ' ', text)
     
     return text.strip()
 
@@ -561,13 +583,16 @@ async def handle_check_menu_item_english(
 
     logger.info(f"Full output payload for {function_name}: {json.dumps(output_payload, indent=2)}")
 
+    # Clean the response payload before sending to ensure proper TTS output
+    cleaned_output_payload = clean_response_for_tts(output_payload)
+
     # The 'content' field must contain the full JSON payload for the agent to process options,
     # as per the system prompt rule #4. The agent is designed to parse this JSON.
     response = {
         "type": "FunctionCallResponse",
         "id": function_call_id,
         "name": function_name,
-        "content": json.dumps(output_payload)
+        "content": json.dumps(cleaned_output_payload)
     }
     await deepgram_service.send_json(response)
     logger.info(f"Sent FunctionCallResponse for {function_name} (ID: {function_call_id}): {response['content']}")

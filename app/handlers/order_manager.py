@@ -1,6 +1,7 @@
 import logging
 from typing import Dict, Any, Optional, List
 from thefuzz import process
+from app.utils.text_normalization import normalize_for_matching, normalize_options_for_matching
 
 logger = logging.getLogger(__name__)
 
@@ -86,14 +87,21 @@ class OrderManager:
             item["current_step"] += 1
             return self.get_next_question(call_sid)
 
-        best_match, score = process.extractOne(user_input, options)
+        # Normalize user input and options for more robust matching
+        normalized_input = normalize_for_matching(user_input)
+        normalized_options, norm_to_orig_map = normalize_options_for_matching(options)
+        
+        best_match_normalized, score = process.extractOne(normalized_input, normalized_options)
 
-        if score < 80:
+        if score < 75:  # Lowered from 80 to 75 for better tolerance
             options_str = ", ".join(options)
             return {
                 "status": "REPROMPT",
                 "message_for_agent": f"I'm sorry, I didn't understand that. For {group_name}, your options are: {options_str}. Which would you like?"
             }
+        
+        # Get the original option name from the normalized match
+        best_match = norm_to_orig_map[best_match_normalized]
         
         # Store the selection
         item["selections"][group_name] = best_match
@@ -139,7 +147,12 @@ class OrderManager:
             return {"status": "ERROR", "message_for_agent": f"I'm sorry, there was an issue retrieving the options for {group_name}. Let's try adding that item again later. What else can I get for you?"}
 
         options_str = ", ".join(options)
-        message_for_agent = f"For the {item['item_name']}, what would you like for {group_name}? Your options are: {options_str}."
+        
+        # Customize prompt for flavor selections
+        if "flavor" in group_name.lower() or "choose one" in group_name.lower():
+            message_for_agent = f"For the {item['item_name']}, what flavor would you like? Your options are: {options_str}."
+        else:
+            message_for_agent = f"For the {item['item_name']}, what would you like for {group_name}? Your options are: {options_str}."
 
         # Add skip option for both optional extras groups
         if "pick your extras" in group_name.lower():
@@ -256,10 +269,16 @@ class OrderManager:
                         "quantity": quantity
                     }
         
-        # Try fuzzy matching against the dish names
-        best_match, score = process.extractOne(user_input, ambiguous_matches)
+        # Try fuzzy matching against the dish names with normalization
+        normalized_input = normalize_for_matching(user_input)
+        normalized_matches, norm_to_orig_map = normalize_options_for_matching(ambiguous_matches)
         
-        if score >= 80:
+        best_match_normalized, score = process.extractOne(normalized_input, normalized_matches)
+        
+        if score >= 75:  # Lowered from 80 to 75
+            # Get the original dish name from the normalized match
+            best_match = norm_to_orig_map[best_match_normalized]
+            
             # Find the corresponding dish details
             for i, name in enumerate(ambiguous_matches):
                 if name == best_match:
