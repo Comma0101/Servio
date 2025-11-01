@@ -612,7 +612,23 @@ async def handle_standard_item_selection(
     user_input = input_data.get("user_input")
     logger.info(f"Handling {function_name} with user_input '{user_input}' for a standard item (CallSid: {call_sid})")
 
-    # Check for pending ambiguous selection FIRST
+    # NEW: Check if item is awaiting confirmation FIRST
+    if order_manager.is_awaiting_confirmation(call_sid):
+        logger.info(f"Processing confirmation or modification for call_sid: {call_sid}")
+        response_payload = order_manager.modify_option_during_confirmation(call_sid, user_input)
+        
+        cleaned_response_payload = clean_response_for_tts(response_payload)
+        response = {
+            "type": "FunctionCallResponse",
+            "id": function_call_id,
+            "name": function_name,
+            "content": json.dumps(cleaned_response_payload)
+        }
+        await deepgram_service.send_json(response)
+        logger.info(f"Sent confirmation response for {function_name}")
+        return
+
+    # Check for pending ambiguous selection
     if order_manager.has_pending_ambiguous(call_sid):
         logger.info(f"Resolving ambiguous menu selection for call_sid: {call_sid}")
         resolution_result = order_manager.resolve_ambiguous(call_sid, user_input)
@@ -1319,7 +1335,7 @@ async def handle_finalize_current_item(
 ):
     """
     Finalizes the current active item (standard or combo) and adds it to the main cart.
-    This replaces the 'order_summary' with summary='IN PROGRESS' pattern.
+    Also handles items in confirmation state.
     """
     logger.info(f"Handling {function_name} for call_sid: {call_sid}")
 
@@ -1344,12 +1360,23 @@ async def handle_finalize_current_item(
             response_payload["status"] = "ERROR"
             response_payload["message_for_agent"] = "I'm sorry, there was an error finalizing that item. Let's try again."
 
+    # Check for item awaiting confirmation
+    elif order_manager.is_awaiting_confirmation(call_sid):
+        logger.info(f"Item is awaiting confirmation for {call_sid}. Auto-confirming and adding to cart.")
+        # Simulate a "yes" confirmation to trigger the add-to-cart logic
+        confirmation_result = order_manager.modify_option_during_confirmation(call_sid, "yes")
+        
+        if confirmation_result.get("status") == "CONFIRMED":
+            response_payload["status"] = "ITEM_ADDED"
+            response_payload["message_for_agent"] = confirmation_result.get("message_for_agent")
+        else:
+            logger.error(f"Failed to confirm item for {call_sid}: {confirmation_result}")
+            response_payload["status"] = "ERROR"
+            response_payload["message_for_agent"] = "I'm sorry, there was an error confirming that item. Let's try again."
+
     # Check for active standard item
     elif order_manager.is_active(call_sid):
-        # The OrderManager automatically finalizes and adds to cart when all options are complete
-        # So if we reach here, the item should already be in the cart from the last process_selection call
-        logger.warning(f"finalize_current_item called but order_manager still has active item for {call_sid}. This shouldn't happen if item was configured properly.")
-        # Try to get the current active item info for the message
+        logger.warning(f"finalize_current_item called but order_manager still has active item for {call_sid}. Item should be in confirmation state.")
         active_item = order_manager.active_items.get(call_sid, {})
         item_name = active_item.get("item_name", "the item")
         response_payload["status"] = "ERROR"

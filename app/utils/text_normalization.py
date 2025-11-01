@@ -68,3 +68,72 @@ def normalize_options_for_matching(options: List[str]) -> Tuple[List[str], dict]
     normalized = [normalize_for_matching(opt) for opt in options]
     mapping = {norm: orig for norm, orig in zip(normalized, options) if norm}
     return normalized, mapping
+
+
+def clean_option_group_name(group_name: str) -> str:
+    """
+    Cleans option group names for natural, conversational speech output.
+    
+    Removes common prefixes like "Pick your", "Choose your", etc. and maps
+    generic names to their semantic meaning to create more natural-sounding
+    phrases for voice agents.
+    
+    Args:
+        group_name: The original option group name from menu data
+        
+    Returns:
+        Cleaned name suitable for natural speech
+        
+    Examples:
+        >>> clean_option_group_name("Pick your flavor")
+        'flavor'
+        >>> clean_option_group_name("Pick your spicy level")
+        'spicy level'
+        >>> clean_option_group_name("Choose one")
+        'flavor'
+        >>> clean_option_group_name("Pick one")
+        'flavor'
+        >>> clean_option_group_name("Sides")
+        'Sides'
+    """
+    if not group_name:
+        return group_name
+    
+    cleaned = group_name.strip()
+    cleaned_lower = cleaned.lower()
+    
+    # Semantic mappings for generic option group names
+    # These represent what the option actually means in context
+    semantic_mappings = {
+        "one": "flavor",
+        "choose one": "flavor",
+        "select one": "flavor",
+        "pick one": "flavor"
+    }
+    
+    # Check for semantic mappings first (before prefix removal)
+    if cleaned_lower in semantic_mappings:
+        return semantic_mappings[cleaned_lower]
+    
+    # Common prefixes to remove (case-insensitive)
+    prefixes_to_remove = [
+        "pick your ",
+        "choose your ",
+        "select your ",
+        "select ",
+        "choose ",
+        "pick "
+    ]
+    
+    # Check each prefix and remove if found
+    for prefix in prefixes_to_remove:
+        if cleaned_lower.startswith(prefix):
+            # Remove prefix but preserve original casing of remaining text
+            cleaned = cleaned[len(prefix):]
+            # After removing prefix, check if result maps to something semantic
+            remaining_lower = cleaned.lower().strip()
+            if remaining_lower in semantic_mappings:
+                return semantic_mappings[remaining_lower]
+            break
+    
+    return cleaned.strip()

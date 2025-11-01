@@ -77,7 +77,8 @@ class Settings(BaseSettings):
     RESTAURANT_OPENAI_TOOLS: List[Dict[str, Any]] = DEFAULT_OPENAI_TOOLS
     RESTAURANT_TAX_RATE: float = DEFAULT_TAX_RATE
     CHINESE_WELCOME_MESSAGE: str = "您好！欢迎致电食为天餐厅。请您注意，目前我们只支持到店自取和付款。您可以直接开始点餐，或让我通过短信将菜单发给您。如需人工服务，请随时按0。"
-    ENGLISH_WELCOME_MESSAGE: str = "Hello! Welcome to {restaurant_name}.Just a quick heads-up: all orders are for in-store pickup and payment. I’ll take your order one dish at a time. If you want to see the menu, just say text me the menu, or You can tell me directly what you’d like. For example, you could say, 'Can I have the tacos?' If you need to speak with someone, press 0 at any time. So, what can I get started for you today?"
+    ENGLISH_WELCOME_MESSAGE: str = "Hello! Welcome to {restaurant_name}."
+    #Just a quick heads-up: all orders are for in-store pickup and payment. I’ll take your order one dish at a time. If you want to see the menu, just say text me the menu, or You can tell me directly what you’d like. For example, you could say, 'Can I have the tacos?' If you need to speak with someone, press 0 at any time. So, what can I get started for you today?"
     # "Hello! Welcome to {restaurant_name}.Just a quick heads-up: all orders are for in-store pickup and payment. I’ll take your order one dish at a time. You can ask me for the menu, or You can tell me directly what you’d like. For example, you could say, 'Can I have the tacos?' If you need to speak with someone, press 0 at any time. So, what can I get started for you today?"
     # Other Configuration
     PUBLIC_BASE_URL: Optional[str] = None

@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, Any, Optional, List
 from thefuzz import process
-from app.utils.text_normalization import normalize_for_matching, normalize_options_for_matching
+from app.utils.text_normalization import normalize_for_matching, normalize_options_for_matching, clean_option_group_name
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +30,442 @@ class OrderManager:
         self.carts: Dict[str, List[Dict[str, Any]]] = {}
         # Stores pending ambiguous menu items awaiting user clarification
         self.pending_ambiguous_items: Dict[str, Dict[str, Any]] = {}
+        # NEW: Track items awaiting confirmation
+        self.items_awaiting_confirmation: Dict[str, Dict[str, Any]] = {}
+        # NEW: Track pending option clarifications during modification
+        # Format: {call_sid: {"option_group": "FLAVOR", "awaiting_value": True}}
+        self.pending_option_clarification: Dict[str, Dict[str, Any]] = {}
 
     def is_active(self, call_sid: str) -> bool:
         """Check if an item is being configured for a given call_sid."""
         return call_sid in self.active_items
+
+    def is_awaiting_confirmation(self, call_sid: str) -> bool:
+        """Check if an item is awaiting confirmation."""
+        return call_sid in self.items_awaiting_confirmation
+
+    def enter_confirmation_state(self, call_sid: str) -> Dict[str, Any]:
+        """
+        Moves an active item to confirmation state and presents summary.
+        
+        Returns:
+            {
+                "status": "AWAITING_CONFIRMATION",
+                "message_for_agent": str (complete summary to read),
+                "item_summary": Dict (structured data)
+            }
+        """
+        if call_sid not in self.active_items:
+            return {
+                "status": "ERROR",
+                "message_for_agent": "No active item to confirm."
+            }
+        
+        active_item = self.active_items[call_sid]
+        item_name = active_item.get("item_name")
+        quantity = active_item.get("quantity", 1)
+        selections = active_item.get("selections", {})
+        
+        # Move to confirmation state
+        self.items_awaiting_confirmation[call_sid] = active_item
+        del self.active_items[call_sid]
+        
+        # Build complete summary with cleaned option group names
+        summary_parts = []
+        summary_parts.append(f"I have {quantity} {item_name}")
+        
+        for option_group, selection in selections.items():
+            # Clean the option group name for natural speech
+            cleaned_group_name = clean_option_group_name(option_group)
+            summary_parts.append(f"{cleaned_group_name}: {selection}")
+        
+        summary_text = ", ".join(summary_parts) + ". Is that correct?"
+        
+        return {
+            "status": "AWAITING_CONFIRMATION",
+            "message_for_agent": summary_text,
+            "item_summary": {
+                "name": item_name,
+                "quantity": quantity,
+                "selections": selections
+            }
+        }
+
+    def modify_option_during_confirmation(self, call_sid: str, user_input: str) -> Dict[str, Any]:
+        """
+        Handles modification requests during confirmation state.
+        Detects which option to change and updates it.
+        
+        Args:
+            call_sid: The call session ID
+            user_input: User's modification request (e.g., "change flavor to mild")
+        
+        Returns:
+            {
+                "status": "MODIFIED" | "NEED_CLARIFICATION" | "CONFIRMED",
+                "message_for_agent": str,
+                "item_summary": Dict (updated)
+            }
+        """
+        if call_sid not in self.items_awaiting_confirmation:
+            return {
+                "status": "ERROR",
+                "message_for_agent": "No item is awaiting confirmation."
+            }
+        
+        item = self.items_awaiting_confirmation[call_sid]
+        user_input_lower = user_input.lower().strip()
+        
+        # Check if we're expecting a value for a specific option (stateful clarification)
+        pending_clarification = self.pending_option_clarification.get(call_sid)
+        if pending_clarification:
+            detected_option = pending_clarification["option_group"]
+            logger.info(f"Using pending clarification for option '{detected_option}'")
+            # Clear the pending clarification
+            del self.pending_option_clarification[call_sid]
+            
+            # IMPORTANT: Skip all detection logic and jump directly to value matching
+            # We already know which option group to modify from pending state
+            dish_details = item.get("dish_details", {})
+            option_groups = dish_details.get("optionGroups", [])
+            
+            # Find the target group
+            target_group = None
+            for group in option_groups:
+                group_name = _get_english_name(group.get("name", {}))
+                if group_name == detected_option:
+                    target_group = group
+                    break
+            
+            if not target_group:
+                return {
+                    "status": "ERROR",
+                    "message_for_agent": "I couldn't find that option to change."
+                }
+            
+            # Extract options and match the user's value
+            options_in_group = [_get_english_name(opt.get("name", {})) for opt in target_group.get("options", [])]
+            
+            # Use fuzzy matching to find the selection
+            normalized_input = normalize_for_matching(user_input)
+            normalized_options, norm_to_orig_map = normalize_options_for_matching(options_in_group)
+            
+            best_match_normalized, score = process.extractOne(normalized_input, normalized_options)
+            
+            if score < 70:
+                # Still can't find a good match - ask again
+                cleaned_option_name = clean_option_group_name(detected_option)
+                options_str = ", ".join(options_in_group)
+                
+                # Re-store the pending clarification for another attempt
+                self.pending_option_clarification[call_sid] = {
+                    "option_group": detected_option,
+                    "awaiting_value": True
+                }
+                logger.info(f"Re-set pending clarification for option '{detected_option}' - user input still unclear")
+                
+                return {
+                    "status": "NEED_CLARIFICATION",
+                    "message_for_agent": f"I'm sorry, I didn't catch that. For {cleaned_option_name}, your options are: {options_str}. Which would you like?"
+                }
+            
+            # Get original option name
+            best_match = norm_to_orig_map[best_match_normalized]
+            
+            # Update the selection
+            item["selections"][detected_option] = best_match
+            logger.info(f"Modified {detected_option} to {best_match} for call {call_sid}")
+            
+            # Build updated summary with cleaned option group names
+            summary_parts = []
+            summary_parts.append(f"I have {item.get('quantity', 1)} {item.get('item_name')}")
+            
+            for option_group, selection in item.get("selections", {}).items():
+                # Clean the option group name for natural speech
+                cleaned_group_name = clean_option_group_name(option_group)
+                summary_parts.append(f"{cleaned_group_name}: {selection}")
+            
+            summary_text = ", ".join(summary_parts) + ". Is that correct now?"
+            
+            return {
+                "status": "MODIFIED",
+                "message_for_agent": summary_text,
+                "item_summary": {
+                    "name": item.get("item_name"),
+                    "quantity": item.get("quantity", 1),
+                    "selections": item.get("selections", {})
+                }
+            }
+        
+        # No pending clarification - proceed with normal modification flow
+        # Check if user wants to cancel/finalize without more changes
+        cancel_phrases = ["no", "that's it", "i'm done", "done changing", "nothing else", "no changes", "looks good"]
+        if not pending_clarification and any(phrase in user_input_lower for phrase in cancel_phrases):
+            # Only treat as confirmation if it's clear they're done (not a simple "no" in other contexts)
+            if any(phrase in user_input_lower for phrase in ["that's it", "i'm done", "done changing", "nothing else", "no changes"]):
+                # Move to cart
+                self.add_item_to_cart(
+                    call_sid,
+                    item.get("item_name"),
+                    item.get("quantity", 1),
+                    item.get("selections", {})
+                )
+                del self.items_awaiting_confirmation[call_sid]
+                
+                return {
+                    "status": "CONFIRMED",
+                    "message_for_agent": f"Great! I've added the {item.get('item_name')} to your order. What else can I get for you?",
+                    "current_cart": self.get_cart(call_sid)
+                }
+        
+        # Check if user is confirming (yes/correct/good/etc)
+        confirmation_phrases = ["yes", "correct", "right", "good", "yep", "yeah", "that's right", "sounds good", "perfect"]
+        if not pending_clarification and any(phrase in user_input_lower for phrase in confirmation_phrases):
+            # Move to cart
+            self.add_item_to_cart(
+                call_sid,
+                item.get("item_name"),
+                item.get("quantity", 1),
+                item.get("selections", {})
+            )
+            del self.items_awaiting_confirmation[call_sid]
+            
+            return {
+                "status": "CONFIRMED",
+                "message_for_agent": f"Great! I've added the {item.get('item_name')} to your order. What else can I get for you?",
+                "current_cart": self.get_cart(call_sid)
+            }
+        
+        # Detect which option they want to change
+        dish_details = item.get("dish_details", {})
+        option_groups = dish_details.get("optionGroups", [])
+        
+        # Extract option group names and create mappings
+        available_options = {}  # {lowercase_name: group}
+        option_name_map = {}  # {lowercase_name: original_name}
+        
+        for group in option_groups:
+            group_name = _get_english_name(group.get("name", {}))
+            if group_name:
+                available_options[group_name.lower()] = group
+                option_name_map[group_name.lower()] = group_name
+        
+        # NEW: Parse "change X to Y" or just "X to Y" patterns where X is current value, Y is new value
+        import re
+        from thefuzz import fuzz
+        
+        # Make "change" prefix optional to handle Deepgram AI preprocessing
+        change_pattern = r'(?:change\s+)?(.+?)\s+to\s+(.+)'
+        match = re.search(change_pattern, user_input_lower)
+        
+        detected_option = None
+        new_value_hint = None
+        current_selections = item.get("selections", {})
+        
+        if match:
+            # Extract what user wants to change FROM and TO
+            from_value = match.group(1).strip()
+            new_value_hint = match.group(2).strip()
+            
+            logger.info(f"Parsed modification request: from='{from_value}' to='{new_value_hint}'")
+            
+            # Strategy 1: Exact substring match in current selections
+            for option_group, current_selection in current_selections.items():
+                if current_selection and from_value in current_selection.lower():
+                    detected_option = option_group
+                    logger.info(f"Strategy 1: Detected option '{option_group}' by exact substring match '{from_value}' in '{current_selection}'")
+                    break
+            
+            # Strategy 2: Fuzzy match from_value against current selections
+            if not detected_option:
+                best_match_score = 0
+                best_match_group = None
+                for option_group, current_selection in current_selections.items():
+                    if current_selection:
+                        score = fuzz.partial_ratio(from_value, current_selection.lower())
+                        if score > 70 and score > best_match_score:
+                            best_match_score = score
+                            best_match_group = option_group
+                
+                if best_match_group:
+                    detected_option = best_match_group
+                    logger.info(f"Strategy 2: Detected option '{detected_option}' by fuzzy matching '{from_value}' (score: {best_match_score})")
+            
+            # Strategy 3: Search through ALL options in ALL groups for a match
+            if not detected_option:
+                best_match_score = 0
+                best_match_group = None
+                
+                for group_name_lower, group_data in available_options.items():
+                    options_in_group = [_get_english_name(opt.get("name", {})) for opt in group_data.get("options", [])]
+                    
+                    for opt in options_in_group:
+                        if opt:
+                            opt_lower = opt.lower()
+                            # Check exact substring first
+                            if from_value in opt_lower or opt_lower in from_value:
+                                detected_option = option_name_map[group_name_lower]
+                                logger.info(f"Strategy 3a: Detected option '{detected_option}' by finding '{from_value}' in option '{opt}'")
+                                break
+                            
+                            # Check fuzzy match
+                            score = fuzz.partial_ratio(from_value, opt_lower)
+                            if score > 70 and score > best_match_score:
+                                best_match_score = score
+                                best_match_group = option_name_map[group_name_lower]
+                    
+                    if detected_option:
+                        break
+                
+                if not detected_option and best_match_group:
+                    detected_option = best_match_group
+                    logger.info(f"Strategy 3b: Detected option '{detected_option}' by fuzzy matching '{from_value}' against all options (score: {best_match_score})")
+            
+            # Strategy 4: Match as option group keyword
+            if not detected_option:
+                for option_name_lower in available_options.keys():
+                    if from_value in option_name_lower or option_name_lower in from_value:
+                        detected_option = option_name_map[option_name_lower]
+                        logger.info(f"Strategy 4: Detected option '{detected_option}' by keyword match")
+                        break
+                
+                # Check common keyword variations
+                if not detected_option:
+                    if "flavor" in from_value or "favour" in from_value or "favor" in from_value:
+                        detected_option = next((name for name_lower, name in option_name_map.items() if "flavor" in name_lower), None)
+                        if detected_option:
+                            logger.info(f"Strategy 4: Detected option '{detected_option}' by flavor keyword")
+                    elif "spicy" in from_value or "spice" in from_value:
+                        detected_option = next((name for name_lower, name in option_name_map.items() if "spicy" in name_lower or "spice" in name_lower), None)
+                        if detected_option:
+                            logger.info(f"Strategy 4: Detected option '{detected_option}' by spice keyword")
+        else:
+            # No "change X to Y" pattern - try to detect option from user input (original logic)
+            for option_name_lower, group in available_options.items():
+                if option_name_lower in user_input_lower:
+                    detected_option = option_name_map[option_name_lower]
+                    break
+            
+            # Also check for common keywords
+            if not detected_option:
+                if "flavor" in user_input_lower or "favour" in user_input_lower:
+                    detected_option = next((name for name_lower, name in option_name_map.items() if "flavor" in name_lower), None)
+                elif "spicy" in user_input_lower or "spice" in user_input_lower:
+                    detected_option = next((name for name_lower, name in option_name_map.items() if "spicy" in name_lower or "spice" in name_lower), None)
+            
+            # FALLBACK: If still not detected and there's only ONE option, use it
+            if not detected_option and len(available_options) == 1:
+                detected_option = list(option_name_map.values())[0]
+                logger.info(f"Auto-detected single option group: {detected_option}")
+            
+            # NEW: If we detected an option but user input seems to be ONLY the option name (no value),
+            # immediately prompt for the value instead of trying to match against option values
+            if detected_option:
+                # Use clean_option_group_name to normalize the detected option for better comparison
+                cleaned_detected_option = clean_option_group_name(detected_option).lower()
+                
+                # Normalize user input for comparison
+                normalized_user_input = normalize_for_matching(user_input)
+                
+                # Calculate similarity between normalized inputs
+                from thefuzz import fuzz
+                similarity = fuzz.ratio(normalized_user_input, cleaned_detected_option)
+                
+                # If similarity is high (>70), user likely said just the option name
+                if similarity > 70:
+                    logger.info(f"User input '{user_input}' appears to be just option name '{detected_option}' (normalized: '{normalized_user_input}' vs '{cleaned_detected_option}', similarity: {similarity})")
+                    
+                    # Get the target group and immediately prompt for value
+                    target_group = available_options.get(detected_option.lower())
+                    if target_group:
+                        options_in_group = [_get_english_name(opt.get("name", {})) for opt in target_group.get("options", [])]
+                        cleaned_option_name = clean_option_group_name(detected_option)
+                        options_str = ", ".join(options_in_group)
+                        
+                        # Set pending clarification
+                        self.pending_option_clarification[call_sid] = {
+                            "option_group": detected_option,
+                            "awaiting_value": True
+                        }
+                        logger.info(f"Set pending clarification for option '{detected_option}' (user said option name only)")
+                        
+                        return {
+                            "status": "NEED_CLARIFICATION",
+                            "message_for_agent": f"For {cleaned_option_name}, your options are: {options_str}. Which would you like?"
+                        }
+        
+        if not detected_option:
+            # Ask for clarification with cleaned option names
+            option_names = ", ".join([clean_option_group_name(_get_english_name(g.get("name", {}))) for g in option_groups])
+            return {
+                "status": "NEED_CLARIFICATION",
+                "message_for_agent": f"What would you like to change? Your options are: {option_names}."
+            }
+        
+        # Get the target group
+        target_group = available_options.get(detected_option.lower())
+        if not target_group:
+            return {
+                "status": "ERROR",
+                "message_for_agent": "I couldn't find that option to change."
+            }
+        
+        # Extract the new value from user input
+        options_in_group = [_get_english_name(opt.get("name", {})) for opt in target_group.get("options", [])]
+        
+        # Use the hint if we extracted it from "change X to Y", otherwise use full input
+        search_text = new_value_hint if new_value_hint else user_input
+        
+        # Use fuzzy matching to find the selection
+        normalized_input = normalize_for_matching(search_text)
+        normalized_options, norm_to_orig_map = normalize_options_for_matching(options_in_group)
+        
+        best_match_normalized, score = process.extractOne(normalized_input, normalized_options)
+        
+        if score < 70:
+            # Clean the option name for the error message
+            cleaned_option_name = clean_option_group_name(detected_option)
+            options_str = ", ".join(options_in_group)
+            
+            # Store the pending clarification so next user input is treated as value for this option
+            self.pending_option_clarification[call_sid] = {
+                "option_group": detected_option,
+                "awaiting_value": True
+            }
+            logger.info(f"Set pending clarification for option '{detected_option}' on call {call_sid}")
+            
+            return {
+                "status": "NEED_CLARIFICATION",
+                "message_for_agent": f"For {cleaned_option_name}, your options are: {options_str}. Which would you like?"
+            }
+        
+        # Get original option name
+        best_match = norm_to_orig_map[best_match_normalized]
+        
+        # Update the selection
+        item["selections"][detected_option] = best_match
+        logger.info(f"Modified {detected_option} to {best_match} for call {call_sid}")
+        
+        # Build updated summary with cleaned option group names
+        summary_parts = []
+        summary_parts.append(f"I have {item.get('quantity', 1)} {item.get('item_name')}")
+        
+        for option_group, selection in item.get("selections", {}).items():
+            # Clean the option group name for natural speech
+            cleaned_group_name = clean_option_group_name(option_group)
+            summary_parts.append(f"{cleaned_group_name}: {selection}")
+        
+        summary_text = ", ".join(summary_parts) + ". Is that correct now?"
+        
+        return {
+            "status": "MODIFIED",
+            "message_for_agent": summary_text,
+            "item_summary": {
+                "name": item.get("item_name"),
+                "quantity": item.get("quantity", 1),
+                "selections": item.get("selections", {})
+            }
+        }
 
     def start_item(self, dish_details: Dict[str, Any], quantity: int, call_sid: str) -> Dict[str, Any]:
         """
@@ -123,16 +555,8 @@ class OrderManager:
         
         # Check if all required steps are completed
         if item["current_step"] >= len(item["option_groups_to_process"]):
-            # Finalize the item and add it to the cart
-            self.add_item_to_cart(call_sid, item["item_name"], item["quantity"], item["selections"])
-            self.clear_active_item(call_sid)
-            
-            selections_summary = ", ".join([f"{v}" for k, v in item['selections'].items()])
-            return {
-                "status": "ITEM_COMPLETE",
-                "message_for_agent": f"Okay, I've added {item['quantity']} {item['item_name']} with {selections_summary} to your order. What else can I get for you?",
-                "current_cart": self.get_cart(call_sid)
-            }
+            # NEW: Enter confirmation instead of immediately adding to cart
+            return self.enter_confirmation_state(call_sid)
 
         # Ask the next question
         current_group = item["option_groups_to_process"][item["current_step"]]
@@ -148,16 +572,21 @@ class OrderManager:
 
         options_str = ", ".join(options)
         
-        # Customize prompt for flavor selections
-        if "flavor" in group_name.lower() or "choose one" in group_name.lower():
+        # Clean the option group name for natural speech
+        cleaned_group_name = clean_option_group_name(group_name)
+        
+        # Customize prompt based on option type
+        if "flavor" in cleaned_group_name.lower():
             message_for_agent = f"For the {item['item_name']}, what flavor would you like? Your options are: {options_str}."
+        elif "spicy" in cleaned_group_name.lower() or "spice" in cleaned_group_name.lower():
+            message_for_agent = f"For the {item['item_name']}, what {cleaned_group_name} would you like? Your options are: {options_str}."
         else:
-            message_for_agent = f"For the {item['item_name']}, what would you like for {group_name}? Your options are: {options_str}."
+            message_for_agent = f"For the {item['item_name']}, what would you like for {cleaned_group_name}? Your options are: {options_str}."
 
-        # Add skip option for both optional extras groups
-        if "pick your extras" in group_name.lower():
+        # Add skip option for optional extras groups
+        if "extras" in cleaned_group_name.lower():
             message_for_agent += " You can also say 'no extras' to skip."
-        elif "extra sauce" in group_name.lower():
+        elif "extra sauce" in cleaned_group_name.lower():
             message_for_agent += " You can also say 'no extra sauce' to skip."
 
         return {
