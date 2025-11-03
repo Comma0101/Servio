@@ -7,6 +7,9 @@ __pycache__/
 venv/
 ENV/
 .venv/
+
+# Application source code (protected)
+app/
 # Flask session files
 flask_session/
 
@@ -29,3 +32,6 @@ app/parabolic-wall-459005-u5-55f740733ce9.json
 
 # Cache files
 app/utils/extracted_dishes_cache*.json
+
+# Log files
+log.json

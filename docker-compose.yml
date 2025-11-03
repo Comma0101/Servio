@@ -1,7 +1,6 @@
 services:
   app:
-    build: .
-    image: servio-app:v19
+    image: ghcr.io/comma0101/servio:latest
     # Create 3 instances of the app service
     deploy:
       replicas: 3
@@ -12,9 +11,7 @@ services:
     environment:
       - DB_HOST=postgres
       - REDIS_HOST=redis
-      - PUBLIC_BASE_URL=https://173e90773399.ngrok-free.app
-    volumes:
-      - ./app:/app/app
+      - PUBLIC_BASE_URL=https://0ad73f4232ec.ngrok-free.app
     depends_on:
       - postgres
       - redis
