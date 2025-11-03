@@ -35,3 +35,19 @@ app/utils/extracted_dishes_cache*.json
 
 # Log files
 log.json
+*.log
+pod_logs*.txt
+
+# Development & local configs
+docker-compose.override.yml
+docker-compose.dev.yml
+
+# AI Assistant memory
+memory_bank/
+
+# Documentation and planning files (internal use)
+*.md
+*.json
+
+# Audio processing
+peaks/
